@@ -1,0 +1,349 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "",
+    SubTitle = "",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.Delete
+})
+
+local Tabs = {
+    Ragdoll = Window:AddTab({ Title = "Ragdoll", Icon = "" }),
+    Heads = Window:AddTab({ Title = "Heads", Icon = "" }),
+    Binds = Window:AddTab({ Title = "Binds", Icon = "keyboard" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+local RespawnDelay = 0.8
+
+local function ApplyRagdollToggle(state)
+    local f = workspace:FindFirstChild(game.Players.LocalPlayer.Name)
+
+    for _, c in ipairs(f and f:GetChildren() or {}) do
+        if c:IsA("LocalScript") then
+            local ok, code = pcall(decompile, c)
+            if ok and code and code:find("LocalRagdollEvent") and code:find("RagdollState") and code:find("FreeCoins") then
+                c.Disabled = state
+            end
+        end
+    end
+end
+
+local Toggle = Tabs.Ragdoll:AddToggle("RagdollToggle", {
+    Title = "Ragdoll script",
+    Description = "Переключить ragdoll скрипт",
+    Default = false
+})
+
+Toggle:OnChanged(function(Value)
+    ApplyRagdollToggle(Value)
+end)
+
+ApplyRagdollToggle(Options.RagdollToggle.Value)
+
+local function ApplyRagdollRemote(state)
+    local e = game:GetService("ReplicatedStorage"):FindFirstChild("RagdollEvent")
+    if not e then return end
+
+    if state then
+        for _, c in ipairs(getconnections(e.Event)) do
+            c:Disable()
+        end
+    else
+        for _, c in ipairs(getconnections(e.Event)) do
+            c:Enable()
+        end
+    end
+end
+
+local RemoteToggle = Tabs.Ragdoll:AddToggle("RagdollRemote", {
+    Title = "Ragdoll remote",
+    Description = "Переключить ragdoll remote",
+    Default = false
+})
+
+RemoteToggle:OnChanged(function(Value)
+    ApplyRagdollRemote(Value)
+end)
+
+ApplyRagdollRemote(Options.RagdollRemote.Value)
+
+local function ApplyRagdollFall(state)
+    game:GetService("Players").LocalPlayer.Gamepasses["No Ragdoll upon Impact"].Value = state
+end
+
+local FallToggle = Tabs.Ragdoll:AddToggle("RagdollFall", {
+    Title = "Ragdoll fall",
+    Description = "Отключить ragdoll при падении",
+    Default = false
+})
+
+FallToggle:OnChanged(function(Value)
+    ApplyRagdollFall(Value)
+end)
+
+ApplyRagdollFall(Options.RagdollFall.Value)
+
+local function ApplyRagdollDelay(state)
+    game:GetService("Players").LocalPlayer.Gamepasses["No Ragdoll Delay"].Value = state
+end
+
+local DelayToggle = Tabs.Ragdoll:AddToggle("RagdollDelay", {
+    Title = "Ragdoll delay",
+    Description = "Отключить задержку ragdoll",
+    Default = false
+})
+
+DelayToggle:OnChanged(function(Value)
+    ApplyRagdollDelay(Value)
+end)
+
+ApplyRagdollDelay(Options.RagdollDelay.Value)
+
+Tabs.Ragdoll:AddButton({
+    Title = "fakepush",
+    Description = "Просто анимация",
+    Callback = function()
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+
+        local tool = Instance.new("Tool")
+        tool.RequiresHandle = false
+        tool.Name = "fakepush"
+        tool.Parent = player.Backpack
+
+        local char = player.Character or player.CharacterAdded:Wait()
+        local humanoid = char:WaitForChild("Humanoid")
+        local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://18550756434"
+
+        local track = animator:LoadAnimation(anim)
+
+        tool.Activated:Connect(function()
+            track:Play()
+        end)
+    end
+})
+
+local function TeleportRespawn()
+    local p = game.Players.LocalPlayer
+    local cf = p.Character.HumanoidRootPart.CFrame
+    p.Character.Humanoid.Health = 0
+    local ch = p.CharacterAdded:Wait()
+    task.wait(RespawnDelay)
+    ch.HumanoidRootPart.CFrame = cf
+end
+
+Tabs.Ragdoll:AddButton({
+    Title = "Respawn teleport",
+    Description = "Возродиться на том же месте",
+    Callback = function()
+        TeleportRespawn()
+    end
+})
+
+Tabs.Ragdoll:AddInput("RespawnDelay", {
+    Title = "Respawn delay",
+    Description = "Задержка перед телепортом",
+    Default = "0.8",
+    Placeholder = "0.8",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num then
+            RespawnDelay = num
+        end
+    end
+})
+
+Tabs.Heads:AddButton({
+    Title = "Reset",
+    Callback = function()
+        local Event = game:GetService("ReplicatedStorage").ApplyAppearance
+        Event:FireServer(
+            nil,
+            nil,
+            false,
+            true
+        )
+    end
+})
+
+local HeadlessConnection = nil
+
+local function ApplyHeadless()
+    local Event = game:GetService("ReplicatedStorage"):FindFirstChild("ApplyAppearance")
+    if not Event then return end
+    Event:FireServer(
+        nil,
+        nil,
+        true,
+        false
+    )
+end
+
+local HeadlessToggle = Tabs.Heads:AddToggle("Headless", {
+    Title = "Headless",
+    Default = false
+})
+
+HeadlessToggle:OnChanged(function(Value)
+    if Value then
+        ApplyHeadless()
+
+        local player = game.Players.LocalPlayer
+        HeadlessConnection = player.CharacterAdded:Connect(function()
+            ApplyHeadless()
+        end)
+    else
+        if HeadlessConnection then
+            HeadlessConnection:Disconnect()
+            HeadlessConnection = nil
+        end
+    end
+end)
+
+local ScriptRow = Tabs.Binds:AddKeybind("ScriptBind", {
+    Title = "Ragdoll script bind",
+    Mode = "Toggle",
+    Default = "None",
+    Callback = function()
+        Toggle:SetValue(not Toggle.Value)
+        if Options.ScriptNotify.Value then
+            Fluent:Notify({
+                Title = "Notify ragdoll",
+                Content = Toggle.Value and "Включено" or "Выключено",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Binds:AddToggle("ScriptNotify", {
+    Title = "Notify ragdoll",
+    Description = "Показывать уведомление при нажатии клавиши",
+    Default = false
+})
+
+local RemoteRow = Tabs.Binds:AddKeybind("RemoteBind", {
+    Title = "Ragdoll remote bind",
+    Mode = "Toggle",
+    Default = "None",
+    Callback = function()
+        RemoteToggle:SetValue(not RemoteToggle.Value)
+        if Options.RemoteNotify.Value then
+            Fluent:Notify({
+                Title = "Notify ragdoll remote",
+                Content = RemoteToggle.Value and "Включено" or "Выключено",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Binds:AddToggle("RemoteNotify", {
+    Title = "Notify ragdoll remote",
+    Description = "Показывать уведомление при нажатии клавиши",
+    Default = false
+})
+
+local FallRow = Tabs.Binds:AddKeybind("FallBind", {
+    Title = "Ragdoll fall bind",
+    Mode = "Toggle",
+    Default = "None",
+    Callback = function()
+        FallToggle:SetValue(not FallToggle.Value)
+        if Options.FallNotify.Value then
+            Fluent:Notify({
+                Title = "Notify ragdoll fall",
+                Content = FallToggle.Value and "Включено" or "Выключено",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Binds:AddToggle("FallNotify", {
+    Title = "Notify ragdoll fall",
+    Description = "Показывать уведомление при нажатии клавиши",
+    Default = false
+})
+
+local DelayRow = Tabs.Binds:AddKeybind("DelayBind", {
+    Title = "Ragdoll delay bind",
+    Mode = "Toggle",
+    Default = "None",
+    Callback = function()
+        DelayToggle:SetValue(not DelayToggle.Value)
+        if Options.DelayNotify.Value then
+            Fluent:Notify({
+                Title = "Notify ragdoll delay",
+                Content = DelayToggle.Value and "Включено" or "Выключено",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Binds:AddToggle("DelayNotify", {
+    Title = "Notify ragdoll delay",
+    Description = "Показывать уведомление при нажатии клавиши",
+    Default = false
+})
+
+local RespawnRow = Tabs.Binds:AddKeybind("RespawnBind", {
+    Title = "Respawn teleport bind",
+    Mode = "Toggle",
+    Default = "None",
+    Callback = function()
+        TeleportRespawn()
+        if Options.RespawnNotify.Value then
+            Fluent:Notify({
+                Title = "Notify respawn teleport",
+                Content = "Активировано",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Binds:AddToggle("RespawnNotify", {
+    Title = "Notify respawn teleport",
+    Description = "Показывать уведомление при нажатии клавиши",
+    Default = false
+})
+
+Tabs.Binds:AddButton({
+    Title = "Очистить все бинды",
+    Description = "Сбросить все привязки клавиш",
+    Callback = function()
+        ScriptRow:SetValue("None", "Toggle")
+        RemoteRow:SetValue("None", "Toggle")
+        FallRow:SetValue("None", "Toggle")
+        DelayRow:SetValue("None", "Toggle")
+        RespawnRow:SetValue("None", "Toggle")
+    end
+})
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("FluentScriptHub")
+SaveManager:SetFolder("FluentScriptHub/specific-game")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+SaveManager:LoadAutoloadConfig()
