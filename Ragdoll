@@ -335,6 +335,28 @@ Tabs.Binds:AddButton({
     end
 })
 
+local CoreGui = game:GetService("CoreGui")
+
+local function HookGui(gui)
+    if not gui:IsA("ScreenGui") then return end
+    if gui.Name ~= "ScreenGui" then return end
+
+    gui.Destroying:Connect(function()
+        pcall(function()
+            if Options.RagdollToggle.Value then Toggle:SetValue(false) end
+            if Options.RagdollRemote.Value then RemoteToggle:SetValue(false) end
+            if Options.RagdollFall.Value then FallToggle:SetValue(false) end
+            if Options.RagdollDelay.Value then DelayToggle:SetValue(false) end
+            if Options.Headless.Value then HeadlessToggle:SetValue(false) end
+        end)
+    end)
+end
+
+for _, g in ipairs(CoreGui:GetChildren()) do
+    HookGui(g)
+end
+CoreGui.ChildAdded:Connect(HookGui)
+
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
