@@ -952,6 +952,38 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
 })
 
 Tabs.Misc:AddButton({
+    Title = "Rejoin",
+    Description = "Перезайти с автозапуском скрипта",
+    Callback = function()
+        local PlaceId = game.PlaceId
+        local JobId = game.JobId
+        local Players = game:GetService("Players")
+        local TeleportService = game:GetService("TeleportService")
+        local LocalPlayer = Players.LocalPlayer
+
+        if queue_on_teleport then
+            queue_on_teleport([[
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/bycinka/Ragdoll/refs/heads/main/Ragdoll"))()
+            ]])
+        else
+            Fluent:Notify({
+                Title = "Rejoin",
+                Content = "queue_on_teleport не поддерживается",
+                Duration = 3
+            })
+        end
+
+        if #Players:GetPlayers() <= 1 then
+            LocalPlayer:Kick("\nRejoining...")
+            task.wait(0.3)
+            TeleportService:Teleport(PlaceId, LocalPlayer)
+        else
+            TeleportService:TeleportToPlaceInstance(PlaceId, JobId, LocalPlayer)
+        end
+    end
+})
+
+Tabs.Misc:AddButton({
     Title = "fakepush",
     Description = "Просто анимация",
     Callback = function()
