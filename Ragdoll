@@ -39,6 +39,7 @@ local AutoUseLoops = {}
 local RagdollRespawnHooks = {}
 local RedeemRespawnHook = nil
 local DuckSelfConnection = nil
+local DuckSelfConnections = {}
 local DuckAllConnections = {}
 local DuckAllWatches = {}
 
@@ -358,6 +359,8 @@ local function FindQuack(container)
 end
 
 local function ActivateDuckSelf()
+    DeactivateDuckSelf()
+
     task.spawn(function()
         local player = LocalPlayer
         local backpack = player:WaitForChild("Backpack")
@@ -382,17 +385,17 @@ local function ActivateDuckSelf()
         tryHook(character)
         tryHook(backpack)
 
-        backpack.ChildAdded:Connect(function()
+        table.insert(DuckSelfConnections, backpack.ChildAdded:Connect(function()
             tryHook(backpack)
-        end)
+        end))
 
-        player.CharacterAdded:Connect(function(char)
+        table.insert(DuckSelfConnections, player.CharacterAdded:Connect(function(char)
             task.wait(0.5)
             tryHook(char)
-            char.ChildAdded:Connect(function()
+            table.insert(DuckSelfConnections, char.ChildAdded:Connect(function()
                 tryHook(char)
-            end)
-        end)
+            end))
+        end))
     end)
 end
 
@@ -401,6 +404,13 @@ local function DeactivateDuckSelf()
         DuckSelfConnection:Disconnect()
         DuckSelfConnection = nil
     end
+
+    for _, conn in ipairs(DuckSelfConnections) do
+        pcall(function()
+            conn:Disconnect()
+        end)
+    end
+    DuckSelfConnections = {}
 end
 
 local function TryHookDuckQuack(player)
