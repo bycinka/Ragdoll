@@ -35,7 +35,6 @@ local RedeemDelay = 0.1
 
 local AutoUseToggles = {}
 local AutoUseLoops = {}
-
 local RagdollRespawnHooks = {}
 local RedeemRespawnHook = nil
 local DuckSelfConnection = nil
@@ -73,20 +72,14 @@ local IsBusy = false
 local function FireAppearance(mesh, face, headless, reset)
     if IsBusy then return end
     IsBusy = true
-
     ApplyAppearance:FireServer(mesh, face, headless, reset)
-
-    task.delay(0.5, function()
-        IsBusy = false
-    end)
+    task.delay(0.5, function() IsBusy = false end)
 end
 
 local function GetCurrentFpsCap()
     if getfpscap then
         local ok, cap = pcall(getfpscap)
-        if ok and cap then
-            return tostring(cap)
-        end
+        if ok and cap then return tostring(cap) end
     end
     return "60"
 end
@@ -94,22 +87,16 @@ end
 local function FreezeCharacter()
     local char = LocalPlayer.Character
     if not char then return end
-
     for _, x in next, char:GetDescendants() do
-        if x:IsA("BasePart") and not x.Anchored then
-            x.Anchored = true
-        end
+        if x:IsA("BasePart") and not x.Anchored then x.Anchored = true end
     end
 end
 
 local function UnfreezeCharacter()
     local char = LocalPlayer.Character
     if not char then return end
-
     for _, x in next, char:GetDescendants() do
-        if x:IsA("BasePart") and x.Anchored then
-            x.Anchored = false
-        end
+        if x:IsA("BasePart") and x.Anchored then x.Anchored = false end
     end
 end
 
@@ -135,7 +122,6 @@ end
 
 local function ApplyRagdollToggle(state)
     local f = workspace:FindFirstChild(LocalPlayer.Name)
-
     for _, c in ipairs(f and f:GetChildren() or {}) do
         if c:IsA("LocalScript") then
             local ok, code = pcall(decompile, c)
@@ -147,17 +133,12 @@ local function ApplyRagdollToggle(state)
 end
 
 local function ApplyRagdollRemote(state)
-    local e = game:GetService("ReplicatedStorage"):FindFirstChild("RagdollEvent")
+    local e = ReplicatedStorage:FindFirstChild("RagdollEvent")
     if not e then return end
-
     if state then
-        for _, c in ipairs(getconnections(e.Event)) do
-            c:Disable()
-        end
+        for _, c in ipairs(getconnections(e.Event)) do c:Disable() end
     else
-        for _, c in ipairs(getconnections(e.Event)) do
-            c:Enable()
-        end
+        for _, c in ipairs(getconnections(e.Event)) do c:Enable() end
     end
 end
 
@@ -170,14 +151,12 @@ local function ApplyRagdollDelay(state)
 end
 
 local function ApplyFakePush()
-    local player = LocalPlayer
-
     local tool = Instance.new("Tool")
     tool.RequiresHandle = false
     tool.Name = "fakepush"
-    tool.Parent = player.Backpack
+    tool.Parent = LocalPlayer.Backpack
 
-    local char = player.Character or player.CharacterAdded:Wait()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local humanoid = char:WaitForChild("Humanoid")
     local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
 
@@ -185,30 +164,23 @@ local function ApplyFakePush()
     anim.AnimationId = "rbxassetid://18550756434"
 
     local track = animator:LoadAnimation(anim)
-
-    tool.Activated:Connect(function()
-        track:Play()
-    end)
+    tool.Activated:Connect(function() track:Play() end)
 end
 
 local function ApplyRedeem(item)
-    local Event = game:GetService("ReplicatedStorage"):FindFirstChild("Redeem")
+    local Event = ReplicatedStorage:FindFirstChild("Redeem")
     if not Event then return end
     Event:FireServer(item)
 end
 
 local function ApplyFpsCap(value)
     local num = tonumber(value)
-    if num then
-        setfpscap(num)
-    end
+    if num then setfpscap(num) end
 end
 
 local function ApplyRespawnDelay(value)
     local num = tonumber(value)
-    if num then
-        RespawnDelay = num
-    end
+    if num then RespawnDelay = num end
 end
 
 local function TeleportRespawn()
@@ -221,13 +193,11 @@ local function TeleportRespawn()
 end
 
 local function UseTool(toolName)
-    local p = LocalPlayer
-
-    for _, t in ipairs(p.Backpack:GetChildren()) do
+    for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if string.find(string.lower(t.Name), string.lower(toolName)) then
-            t.Parent = p.Character
+            t.Parent = LocalPlayer.Character
             t:Activate()
-            t.Parent = p.Backpack
+            t.Parent = LocalPlayer.Backpack
             break
         end
     end
@@ -235,13 +205,11 @@ end
 
 local function StartAutoUse(toolName)
     if AutoUseLoops[toolName] then return end
-
     AutoUseLoops[toolName] = task.spawn(function()
         while AutoUseToggles[toolName] and AutoUseToggles[toolName].Value do
             UseTool(toolName)
             task.wait(AutoUseDelay)
         end
-
         AutoUseLoops[toolName] = nil
     end)
 end
@@ -254,33 +222,28 @@ local AFKHooked = false
 
 local function ApplyAFKBlock(state)
     getgenv().AFKBlock = state
+    local AFK = ReplicatedStorage:FindFirstChild("AFK")
+    if not AFK or AFKHooked then return end
 
-    local AFK = game:GetService("ReplicatedStorage"):FindFirstChild("AFK")
-    if not AFK then return end
-
-    if not AFKHooked then
-        local mt = getrawmetatable(game)
-        local old = mt.__namecall
-        setreadonly(mt, false)
-
-        mt.__namecall = newcclosure(function(self, ...)
-            if getgenv().AFKBlock and self == AFK and getnamecallmethod() == "FireServer" then return end
-            return old(self, ...)
-        end)
-
-        setreadonly(mt, true)
-        AFKHooked = true
-    end
+    local mt = getrawmetatable(game)
+    local old = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        if getgenv().AFKBlock and self == AFK and getnamecallmethod() == "FireServer" then return end
+        return old(self, ...)
+    end)
+    setreadonly(mt, true)
+    AFKHooked = true
 end
 
 local function FireAFK(value)
-    local Event = game:GetService("ReplicatedStorage"):FindFirstChild("AFK")
+    local Event = ReplicatedStorage:FindFirstChild("AFK")
     if not Event then return end
     Event:FireServer(value)
 end
 
 local function FireRagdollState(value)
-    local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+    local Events = ReplicatedStorage:FindFirstChild("Events")
     if not Events then return end
     local RagdollState = Events:FindFirstChild("RagdollState")
     if not RagdollState then return end
@@ -290,77 +253,49 @@ end
 local function ApplyDelayValue(value)
     local num = tonumber(value)
     if not num then return end
-
-    local delayObj = game:GetService("ReplicatedStorage"):FindFirstChild("Delay")
+    local delayObj = ReplicatedStorage:FindFirstChild("Delay")
     if not delayObj then return end
-
-    pcall(function()
-        delayObj.Value = num
-    end)
+    pcall(function() delayObj.Value = num end)
 end
 
 local CmdrClient = nil
 do
     local ok, result = pcall(function()
-        return require(game:GetService("ReplicatedStorage").CmdrClient)
+        return require(ReplicatedStorage.CmdrClient)
     end)
-    if ok then
-        CmdrClient = result
-    end
+    if ok then CmdrClient = result end
 end
 
 local function ApplyCmdrToggle(disable)
-    if not CmdrClient then
-        Fluent:Notify({
-            Title = "Disable Cmdr",
-            Content = "CmdrClient не найден",
-            Duration = 3
-        })
-        return
-    end
-
-    local ok, err = pcall(function()
-        CmdrClient:SetEnabled(not disable)
-    end)
-
-    if not ok then
-        pcall(function()
-            CmdrClient.Enabled = not disable
-        end)
-    end
+    if not CmdrClient then return end
+    local ok = pcall(function() CmdrClient:SetEnabled(not disable) end)
+    if not ok then pcall(function() CmdrClient.Enabled = not disable end) end
 end
 
 local function RegisterRagdollRespawnHook(name, toggle, fn)
-    if RagdollRespawnHooks[name] then
-        RagdollRespawnHooks[name]:Disconnect()
-    end
-
+    if RagdollRespawnHooks[name] then RagdollRespawnHooks[name]:Disconnect() end
     RagdollRespawnHooks[name] = LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.5)
-        if toggle and toggle.Value then
-            fn(true)
-        end
+        if toggle and toggle.Value then fn(true) end
     end)
 end
 
 local function FindQuack(container)
     if not container then return nil end
-
     local duck = container:FindFirstChild("DuckProp")
     if not duck then return nil end
-
     local handle = duck:FindFirstChild("Handle")
     if not handle then return nil end
-
     local quack = handle:FindFirstChild("Quack")
     if not quack or not quack:IsA("Sound") then return nil end
-
     return quack
 end
 
-local function ActivateDuckSelf()
-    DeactivateDuckSelf()
+local ActivateDuckSelf
+local DeactivateDuckSelf
 
+ActivateDuckSelf = function()
+    DeactivateDuckSelf()
     task.spawn(function()
         local player = LocalPlayer
         local backpack = player:WaitForChild("Backpack")
@@ -369,65 +304,42 @@ local function ActivateDuckSelf()
         local function tryHook(container)
             local quack = FindQuack(container)
             if not quack then return end
-
-            if DuckSelfConnection then
-                DuckSelfConnection:Disconnect()
-                DuckSelfConnection = nil
-            end
-
+            if DuckSelfConnection then DuckSelfConnection:Disconnect() end
             DuckSelfConnection = quack:GetPropertyChangedSignal("Playing"):Connect(function()
-                if quack.Playing then
-                    ActivateMines()
-                end
+                if quack.Playing then ActivateMines() end
             end)
         end
 
         tryHook(character)
         tryHook(backpack)
 
-        table.insert(DuckSelfConnections, backpack.ChildAdded:Connect(function()
-            tryHook(backpack)
-        end))
-
+        table.insert(DuckSelfConnections, backpack.ChildAdded:Connect(function() tryHook(backpack) end))
         table.insert(DuckSelfConnections, player.CharacterAdded:Connect(function(char)
             task.wait(0.5)
             tryHook(char)
-            table.insert(DuckSelfConnections, char.ChildAdded:Connect(function()
-                tryHook(char)
-            end))
+            table.insert(DuckSelfConnections, char.ChildAdded:Connect(function() tryHook(char) end))
         end))
     end)
 end
 
-local function DeactivateDuckSelf()
+DeactivateDuckSelf = function()
     if DuckSelfConnection then
         DuckSelfConnection:Disconnect()
         DuckSelfConnection = nil
     end
-
     for _, conn in ipairs(DuckSelfConnections) do
-        pcall(function()
-            conn:Disconnect()
-        end)
+        pcall(function() conn:Disconnect() end)
     end
     DuckSelfConnections = {}
 end
 
 local function TryHookDuckQuack(player)
     if DuckAllConnections[player] then return end
-
     task.spawn(function()
-        local backpack = player:FindFirstChildOfClass("Backpack")
-        local character = player.Character
-
-        local quack = FindQuack(character) or FindQuack(backpack)
-        if not quack then return end
-        if DuckAllConnections[player] then return end
-
+        local quack = FindQuack(player.Character) or FindQuack(player:FindFirstChildOfClass("Backpack"))
+        if not quack or DuckAllConnections[player] then return end
         DuckAllConnections[player] = quack:GetPropertyChangedSignal("Playing"):Connect(function()
-            if quack.Playing then
-                ActivateMines()
-            end
+            if quack.Playing then ActivateMines() end
         end)
     end)
 end
@@ -435,65 +347,53 @@ end
 local function ActivateDuckAll()
     local function watchPlayer(player)
         TryHookDuckQuack(player)
+        if DuckAllWatches[player] then return end
+        DuckAllWatches[player] = {}
 
-        if not DuckAllWatches[player] then
-            DuckAllWatches[player] = {}
-
-            local function watchContainer(container)
-                if not container then return end
-
-                table.insert(DuckAllWatches[player], container.ChildAdded:Connect(function(child)
-                    if child.Name == "DuckProp" or child.Name == "Handle" or child.Name == "Quack" then
-                        TryHookDuckQuack(player)
-                    end
-                end))
-            end
-
-            watchContainer(player:FindFirstChildOfClass("Backpack"))
-            watchContainer(player.Character)
-
-            table.insert(DuckAllWatches[player], player.ChildAdded:Connect(function(child)
-                if child:IsA("Backpack") then
-                    watchContainer(child)
+        local function watchContainer(container)
+            if not container then return end
+            table.insert(DuckAllWatches[player], container.ChildAdded:Connect(function(child)
+                if child.Name == "DuckProp" or child.Name == "Handle" or child.Name == "Quack" then
                     TryHookDuckQuack(player)
                 end
             end))
-
-            table.insert(DuckAllWatches[player], player.CharacterAdded:Connect(function(char)
-                task.wait(0.5)
-                watchContainer(char)
-                TryHookDuckQuack(player)
-            end))
         end
+
+        watchContainer(player:FindFirstChildOfClass("Backpack"))
+        watchContainer(player.Character)
+
+        table.insert(DuckAllWatches[player], player.ChildAdded:Connect(function(child)
+            if child:IsA("Backpack") then
+                watchContainer(child)
+                TryHookDuckQuack(player)
+            end
+        end))
+
+        table.insert(DuckAllWatches[player], player.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            watchContainer(char)
+            TryHookDuckQuack(player)
+        end))
     end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        watchPlayer(player)
-    end
+    for _, player in ipairs(Players:GetPlayers()) do watchPlayer(player) end
 
     if not getgenv().DuckAllPlayerAddedHooked then
         getgenv().DuckAllPlayerAddedHooked = true
         Players.PlayerAdded:Connect(function(player)
-            if getgenv().DuckAllActive then
-                watchPlayer(player)
-            end
+            if getgenv().DuckAllActive then watchPlayer(player) end
         end)
     end
 end
 
 local function DeactivateDuckAll()
     for player, conn in pairs(DuckAllConnections) do
-        pcall(function()
-            conn:Disconnect()
-        end)
+        pcall(function() conn:Disconnect() end)
         DuckAllConnections[player] = nil
     end
-
     for player, conns in pairs(DuckAllWatches) do
         for _, conn in ipairs(conns) do
-            pcall(function()
-                conn:Disconnect()
-            end)
+            pcall(function() conn:Disconnect() end)
         end
         DuckAllWatches[player] = nil
     end
@@ -507,9 +407,7 @@ Tabs.Tools:AddInput("AutoUseDelay", {
     Finished = true,
     Callback = function(Value)
         local num = tonumber(Value)
-        if num then
-            AutoUseDelay = num
-        end
+        if num then AutoUseDelay = num end
     end
 })
 
@@ -517,14 +415,11 @@ Tabs.Tools:AddButton({
     Title = "Clear",
     Description = "Удалить тумблеры отсутствующих предметов",
     Callback = function()
-        local player = LocalPlayer
-        local backpack = player:FindFirstChildOfClass("Backpack")
-        local character = player.Character
-
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        local character = LocalPlayer.Character
         for toolName, toggle in pairs(AutoUseToggles) do
             local foundInBackpack = backpack and backpack:FindFirstChild(toolName)
             local foundInCharacter = character and character:FindFirstChild(toolName)
-
             if not foundInBackpack and not foundInCharacter then
                 pcall(function()
                     if toggle.Value then toggle:SetValue(false) end
@@ -538,13 +433,10 @@ Tabs.Tools:AddButton({
 })
 
 local function BuildToolsTab()
-    local player = LocalPlayer
-    local backpack = player:WaitForChild("Backpack")
+    local backpack = LocalPlayer:WaitForChild("Backpack")
 
     local function addTool(tool)
-        if not tool:IsA("Tool") then return end
-        if AutoUseToggles[tool.Name] then return end
-
+        if not tool:IsA("Tool") or AutoUseToggles[tool.Name] then return end
         local toggle
         toggle = Tabs.Tools:AddToggle("Tool_" .. tool.Name, {
             Title = tool.Name,
@@ -552,22 +444,13 @@ local function BuildToolsTab()
             Default = false,
             Callback = function(Value)
                 AutoUseToggles[tool.Name] = toggle
-
-                if Value then
-                    StartAutoUse(tool.Name)
-                else
-                    StopAutoUse(tool.Name)
-                end
+                if Value then StartAutoUse(tool.Name) else StopAutoUse(tool.Name) end
             end
         })
-
         AutoUseToggles[tool.Name] = toggle
     end
 
-    for _, tool in ipairs(backpack:GetChildren()) do
-        addTool(tool)
-    end
-
+    for _, tool in ipairs(backpack:GetChildren()) do addTool(tool) end
     backpack.ChildAdded:Connect(function(tool)
         task.wait(0.1)
         addTool(tool)
@@ -595,43 +478,33 @@ local RagdollRemote = Tabs.Ragdoll:AddToggle("RagdollRemote", {
     Title = "Ragdoll remote",
     Description = "Переключить ragdoll remote",
     Default = false,
-    Callback = function(Value)
-        ApplyRagdollRemote(Value)
-    end
+    Callback = function(Value) ApplyRagdollRemote(Value) end
 })
 
 local RagdollFall = Tabs.Ragdoll:AddToggle("RagdollFall", {
     Title = "Ragdoll fall",
     Description = "Отключить ragdoll при падении",
     Default = false,
-    Callback = function(Value)
-        ApplyRagdollFall(Value)
-    end
+    Callback = function(Value) ApplyRagdollFall(Value) end
 })
 
 local RagdollDelay = Tabs.Ragdoll:AddToggle("RagdollDelay", {
     Title = "Ragdoll delay",
     Description = "Отключить задержку ragdoll",
     Default = true,
-    Callback = function(Value)
-        ApplyRagdollDelay(Value)
-    end
+    Callback = function(Value) ApplyRagdollDelay(Value) end
 })
 
 Tabs.Ragdoll:AddButton({
     Title = "Ragdoll state true",
     Description = "Отправить RagdollState: true",
-    Callback = function()
-        FireRagdollState(true)
-    end
+    Callback = function() FireRagdollState(true) end
 })
 
 Tabs.Ragdoll:AddButton({
     Title = "Ragdoll state false",
     Description = "Отправить RagdollState: false",
-    Callback = function()
-        FireRagdollState(false)
-    end
+    Callback = function() FireRagdollState(false) end
 })
 
 Tabs.Ragdoll:AddInput("RagdollDelayValue", {
@@ -640,9 +513,7 @@ Tabs.Ragdoll:AddInput("RagdollDelayValue", {
     Default = "0",
     Numeric = true,
     Finished = true,
-    Callback = function(Value)
-        ApplyDelayValue(Value)
-    end
+    Callback = function(Value) ApplyDelayValue(Value) end
 })
 
 RegisterRagdollRespawnHook("RagdollToggle", RagdollToggle, ApplyRagdollToggle)
@@ -678,35 +549,23 @@ local Headless = Tabs.Heads:AddToggle("Headless", {
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if Headless and Headless.Value then
-        FireAppearance(nil, nil, true, false)
-    end
+    if Headless and Headless.Value then FireAppearance(nil, nil, true, false) end
 end)
 
 local HeadButtons = {}
 local FaceButtons = {}
 
 local function RefreshHighlights()
-    for _, btn in pairs(FaceButtons) do
-        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    end
-    for _, btn in pairs(HeadButtons) do
-        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    end
+    for _, btn in pairs(FaceButtons) do btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40) end
+    for _, btn in pairs(HeadButtons) do btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40) end
 end
 
 local function SelectFace(faceId, button)
-    if not FaceSet[faceId] then
-        warn("[FacePicker] Rejected face ID:", faceId)
-        return
-    end
-
+    if not FaceSet[faceId] then return end
     IsHeadless = false
     if Headless.Value then Headless:SetValue(false) end
-
     RefreshHighlights()
     button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-
     CurrentFace = faceId
     FireAppearance(CurrentMesh, CurrentFace, false, false)
 end
@@ -720,22 +579,13 @@ local function SelectHead(headData, button)
         FireAppearance(nil, nil, false, true)
         return
     end
-
     if headData.headless then
         Headless:SetValue(true)
         return
     end
-
-    if not HeadMeshSet[headData.mesh] then
-        warn("[HeadPicker] Rejected head mesh:", headData.mesh)
-        return
-    end
-
+    if not HeadMeshSet[headData.mesh] then return end
     RefreshHighlights()
-    if button then
-        button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-    end
-
+    if button then button.BackgroundColor3 = Color3.fromRGB(0, 170, 255) end
     IsHeadless = false
     CurrentMesh = headData.mesh
     FireAppearance(CurrentMesh, CurrentFace, false, false)
@@ -743,7 +593,6 @@ end
 
 task.defer(function()
     task.wait(0.1)
-
     local FluentContainer = Tabs.Heads.Container
 
     local lastOrder = 0
@@ -753,175 +602,132 @@ task.defer(function()
         end
     end
 
-    local HeadPickerScroll = Instance.new("ScrollingFrame")
-    HeadPickerScroll.Name = "HeadPickerScroll"
-    HeadPickerScroll.BackgroundTransparency = 1
-    HeadPickerScroll.BorderSizePixel = 0
-    HeadPickerScroll.Size = UDim2.new(1, -10, 0, 380)
-    HeadPickerScroll.Position = UDim2.new(0, 5, 0, 0)
-    HeadPickerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    HeadPickerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    HeadPickerScroll.ScrollBarThickness = 4
-    HeadPickerScroll.LayoutOrder = lastOrder + 1
-    HeadPickerScroll.Parent = FluentContainer
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "HeadPickerScroll"
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel = 0
+    scroll.Size = UDim2.new(1, -10, 0, 380)
+    scroll.Position = UDim2.new(0, 5, 0, 0)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.ScrollBarThickness = 4
+    scroll.LayoutOrder = lastOrder + 1
+    scroll.Parent = FluentContainer
 
-    local HeadPickerLayout = Instance.new("UIListLayout")
-    HeadPickerLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    HeadPickerLayout.Padding = UDim.new(0, 8)
-    HeadPickerLayout.Parent = HeadPickerScroll
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 8)
+    layout.Parent = scroll
 
-    local FacesLabel = Instance.new("TextLabel")
-    FacesLabel.Text = "Faces"
-    FacesLabel.Font = Enum.Font.GothamBold
-    FacesLabel.TextSize = 14
-    FacesLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-    FacesLabel.BackgroundTransparency = 1
-    FacesLabel.Size = UDim2.new(1, 0, 0, 20)
-    FacesLabel.TextXAlignment = Enum.TextXAlignment.Left
-    FacesLabel.LayoutOrder = 1
-    FacesLabel.Parent = HeadPickerScroll
-
-    local FacesContainer = Instance.new("Frame")
-    FacesContainer.Name = "FacesContainer"
-    FacesContainer.BackgroundTransparency = 1
-    FacesContainer.Size = UDim2.new(1, 0, 0, 0)
-    FacesContainer.AutomaticSize = Enum.AutomaticSize.Y
-    FacesContainer.LayoutOrder = 2
-    FacesContainer.Parent = HeadPickerScroll
-
-    local FaceGrid = Instance.new("UIGridLayout")
-    FaceGrid.CellSize = UDim2.fromOffset(70, 70)
-    FaceGrid.CellPadding = UDim2.fromOffset(6, 6)
-    FaceGrid.SortOrder = Enum.SortOrder.LayoutOrder
-    FaceGrid.Parent = FacesContainer
-
-    for _, faceId in ipairs(Faces) do
-        local btn = Instance.new("ImageButton")
-        btn.Size = UDim2.fromOffset(70, 70)
-        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-        btn.BorderSizePixel = 0
-        btn.Image = "rbxassetid://" .. faceId
-        btn.Parent = FacesContainer
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 8)
-        corner.Parent = btn
-
-        FaceButtons[faceId] = btn
-
-        btn.Activated:Connect(function()
-            SelectFace(faceId, btn)
-        end)
+    local function makeLabel(text, order)
+        local lbl = Instance.new("TextLabel")
+        lbl.Text = text
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 14
+        lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 0, 20)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.LayoutOrder = order
+        lbl.Parent = scroll
+        return lbl
     end
 
-    local HeadsLabel = Instance.new("TextLabel")
-    HeadsLabel.Text = "Heads"
-    HeadsLabel.Font = Enum.Font.GothamBold
-    HeadsLabel.TextSize = 14
-    HeadsLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-    HeadsLabel.BackgroundTransparency = 1
-    HeadsLabel.Size = UDim2.new(1, 0, 0, 20)
-    HeadsLabel.TextXAlignment = Enum.TextXAlignment.Left
-    HeadsLabel.LayoutOrder = 3
-    HeadsLabel.Parent = HeadPickerScroll
+    local function makeGrid(order)
+        local frame = Instance.new("Frame")
+        frame.BackgroundTransparency = 1
+        frame.Size = UDim2.new(1, 0, 0, 0)
+        frame.AutomaticSize = Enum.AutomaticSize.Y
+        frame.LayoutOrder = order
+        frame.Parent = scroll
 
-    local HeadsContainer = Instance.new("Frame")
-    HeadsContainer.Name = "HeadsContainer"
-    HeadsContainer.BackgroundTransparency = 1
-    HeadsContainer.Size = UDim2.new(1, 0, 0, 0)
-    HeadsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    HeadsContainer.LayoutOrder = 4
-    HeadsContainer.Parent = HeadPickerScroll
+        local grid = Instance.new("UIGridLayout")
+        grid.CellSize = UDim2.fromOffset(70, 70)
+        grid.CellPadding = UDim2.fromOffset(6, 6)
+        grid.SortOrder = Enum.SortOrder.LayoutOrder
+        grid.Parent = frame
+        return frame
+    end
 
-    local HeadGrid = Instance.new("UIGridLayout")
-    HeadGrid.CellSize = UDim2.fromOffset(70, 70)
-    HeadGrid.CellPadding = UDim2.fromOffset(6, 6)
-    HeadGrid.SortOrder = Enum.SortOrder.LayoutOrder
-    HeadGrid.Parent = HeadsContainer
-
-    for _, headData in ipairs(Heads) do
+    local function makeBtn(imageId, parent)
         local btn = Instance.new("ImageButton")
         btn.Size = UDim2.fromOffset(70, 70)
         btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
         btn.BorderSizePixel = 0
-        btn.Image = "rbxassetid://" .. (headData.image or headData.mesh)
-        btn.Parent = HeadsContainer
-
+        btn.Image = "rbxassetid://" .. imageId
+        btn.Parent = parent
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 8)
         corner.Parent = btn
+        return btn
+    end
 
+    makeLabel("Faces", 1)
+    local facesContainer = makeGrid(2)
+    for _, faceId in ipairs(Faces) do
+        local btn = makeBtn(faceId, facesContainer)
+        FaceButtons[faceId] = btn
+        btn.Activated:Connect(function() SelectFace(faceId, btn) end)
+    end
+
+    makeLabel("Heads", 3)
+    local headsContainer = makeGrid(4)
+    for _, headData in ipairs(Heads) do
+        local btn = makeBtn(headData.image or headData.mesh, headsContainer)
         HeadButtons[headData] = btn
-
-        btn.Activated:Connect(function()
-            SelectHead(headData, btn)
-        end)
+        btn.Activated:Connect(function() SelectHead(headData, btn) end)
     end
 end)
 
-local FpsCap = Tabs.Misc:AddInput("FpsCap", {
+Tabs.Misc:AddInput("FpsCap", {
     Title = "FPS Cap",
     Description = "Установить лимит FPS",
     Default = GetCurrentFpsCap(),
     Numeric = true,
     Finished = true,
-    Callback = function(Value)
-        ApplyFpsCap(Value)
-    end
+    Callback = function(Value) ApplyFpsCap(Value) end
 })
 
 Tabs.Misc:AddButton({
     Title = "Respawn teleport",
     Description = "Возродиться на том же месте",
-    Callback = function()
-        TeleportRespawn()
-    end
+    Callback = function() TeleportRespawn() end
 })
 
-local RespawnDelayInput = Tabs.Misc:AddInput("RespawnDelay", {
+Tabs.Misc:AddInput("RespawnDelay", {
     Title = "Respawn delay",
     Description = "Задержка перед телепортом",
     Default = "0.8",
     Placeholder = "0.8",
     Numeric = true,
     Finished = true,
-    Callback = function(Value)
-        ApplyRespawnDelay(Value)
-    end
+    Callback = function(Value) ApplyRespawnDelay(Value) end
 })
 
 local AFKToggle = Tabs.Misc:AddToggle("AFKBlock", {
     Title = "AFK Block",
     Description = "Блокировать отправку AFK",
     Default = false,
-    Callback = function(Value)
-        ApplyAFKBlock(Value)
-    end
+    Callback = function(Value) ApplyAFKBlock(Value) end
 })
 
 Tabs.Misc:AddButton({
     Title = "AFK true",
     Description = "Отправить AFK: true",
-    Callback = function()
-        FireAFK(true)
-    end
+    Callback = function() FireAFK(true) end
 })
 
 Tabs.Misc:AddButton({
     Title = "AFK false",
     Description = "Отправить AFK: false",
-    Callback = function()
-        FireAFK(false)
-    end
+    Callback = function() FireAFK(false) end
 })
 
 local CmdrToggle = Tabs.Misc:AddToggle("CmdrToggle", {
     Title = "Disable Cmdr",
     Description = "Отключить командную строку (F2)",
     Default = true,
-    Callback = function(Value)
-        ApplyCmdrToggle(Value)
-    end
+    Callback = function(Value) ApplyCmdrToggle(Value) end
 })
 
 local DuckSelfToggle = nil
@@ -933,9 +739,7 @@ DuckSelfToggle = Tabs.Misc:AddToggle("DuckSelfToggle", {
     Default = false,
     Callback = function(Value)
         if Value then
-            if DuckAllToggle and DuckAllToggle.Value then
-                DuckAllToggle:SetValue(false)
-            end
+            if DuckAllToggle and DuckAllToggle.Value then DuckAllToggle:SetValue(false) end
             ActivateDuckSelf()
         else
             DeactivateDuckSelf()
@@ -949,9 +753,7 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
     Default = false,
     Callback = function(Value)
         if Value then
-            if DuckSelfToggle and DuckSelfToggle.Value then
-                DuckSelfToggle:SetValue(false)
-            end
+            if DuckSelfToggle and DuckSelfToggle.Value then DuckSelfToggle:SetValue(false) end
             getgenv().DuckAllActive = true
             ActivateDuckAll()
         else
@@ -967,9 +769,7 @@ Tabs.Misc:AddButton({
     Callback = function()
         local PlaceId = game.PlaceId
         local JobId = game.JobId
-        local Players = game:GetService("Players")
         local TeleportService = game:GetService("TeleportService")
-        local LocalPlayer = Players.LocalPlayer
 
         if queue_on_teleport then
             queue_on_teleport([[
@@ -996,9 +796,7 @@ Tabs.Misc:AddButton({
 Tabs.Misc:AddButton({
     Title = "fakepush",
     Description = "Просто анимация",
-    Callback = function()
-        ApplyFakePush()
-    end
+    Callback = function() ApplyFakePush() end
 })
 
 Tabs.Redeem:AddInput("RedeemDelay", {
@@ -1009,9 +807,7 @@ Tabs.Redeem:AddInput("RedeemDelay", {
     Finished = true,
     Callback = function(Value)
         local num = tonumber(Value)
-        if num then
-            RedeemDelay = num
-        end
+        if num then RedeemDelay = num end
     end
 })
 
@@ -1019,14 +815,8 @@ local BoomboxConnection = nil
 local BoomboxBackpackConn = nil
 
 local function HookBoombox(tool)
-    if not tool:IsA("Tool") then return end
-    if tool.Name ~= "BOOMBox" and tool.Name:lower() ~= "boombox" then return end
-
-    if BoomboxConnection then
-        BoomboxConnection:Disconnect()
-        BoomboxConnection = nil
-    end
-
+    if not tool:IsA("Tool") or (tool.Name ~= "BOOMBox" and tool.Name:lower() ~= "boombox") then return end
+    if BoomboxConnection then BoomboxConnection:Disconnect() end
     BoomboxConnection = tool.Activated:Connect(function()
         task.wait(RedeemDelay)
         ApplyRedeem("boombox")
@@ -1035,37 +825,23 @@ end
 
 local function ActivateBoombox()
     ApplyRedeem("boombox")
-
-    local player = LocalPlayer
-    local backpack = player:FindFirstChildOfClass("Backpack")
-    local character = player.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local character = LocalPlayer.Character
 
     if backpack then
-        for _, item in ipairs(backpack:GetChildren()) do
-            HookBoombox(item)
-        end
+        for _, item in ipairs(backpack:GetChildren()) do HookBoombox(item) end
     end
-
     if character then
-        for _, item in ipairs(character:GetChildren()) do
-            HookBoombox(item)
-        end
+        for _, item in ipairs(character:GetChildren()) do HookBoombox(item) end
     end
-
     if backpack and not BoomboxBackpackConn then
         BoomboxBackpackConn = backpack.ChildAdded:Connect(HookBoombox)
     end
 end
 
 local function DeactivateBoombox()
-    if BoomboxConnection then
-        BoomboxConnection:Disconnect()
-        BoomboxConnection = nil
-    end
-    if BoomboxBackpackConn then
-        BoomboxBackpackConn:Disconnect()
-        BoomboxBackpackConn = nil
-    end
+    if BoomboxConnection then BoomboxConnection:Disconnect() BoomboxConnection = nil end
+    if BoomboxBackpackConn then BoomboxBackpackConn:Disconnect() BoomboxBackpackConn = nil end
 end
 
 local BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
@@ -1073,11 +849,7 @@ local BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
     Description = 'Получить "boombox"',
     Default = false,
     Callback = function(Value)
-        if Value then
-            ActivateBoombox()
-        else
-            DeactivateBoombox()
-        end
+        if Value then ActivateBoombox() else DeactivateBoombox() end
     end
 })
 
@@ -1087,57 +859,36 @@ local RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
     Title = "Redeem quack",
     Description = 'Получить "quack"',
     Default = false,
-    Callback = function(Value)
-        if Value then
-            ApplyRedeem("quack")
-        end
-    end
+    Callback = function(Value) if Value then ApplyRedeem("quack") end end
 })
-
 RedeemItems[2].toggle = RedeemQuackToggle
 
 local RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
     Title = "Redeem labubu",
     Description = 'Получить "labubu"',
     Default = false,
-    Callback = function(Value)
-        if Value then
-            ApplyRedeem("labubu")
-        end
-    end
+    Callback = function(Value) if Value then ApplyRedeem("labubu") end end
 })
-
 RedeemItems[3].toggle = RedeemLabubuToggle
 
 local RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
     Title = "Redeem sign",
     Description = 'Получить "sign"',
     Default = false,
-    Callback = function(Value)
-        if Value then
-            ApplyRedeem("sign")
-        end
-    end
+    Callback = function(Value) if Value then ApplyRedeem("sign") end end
 })
-
 RedeemItems[4].toggle = RedeemSignToggle
 
 local RedeemBcjdoansToggle = Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
     Title = "Redeem bcjdoans",
     Description = 'Получить "bcjdoans"',
     Default = false,
-    Callback = function(Value)
-        if Value then
-            ApplyRedeem("bcjdoans")
-        end
-    end
+    Callback = function(Value) if Value then ApplyRedeem("bcjdoans") end end
 })
-
 RedeemItems[5].toggle = RedeemBcjdoansToggle
 
 RedeemRespawnHook = LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
-
     for _, entry in ipairs(RedeemItems) do
         if entry.toggle and entry.toggle.Value then
             if entry.item == "boombox" then
@@ -1265,19 +1016,15 @@ Tabs.Binds:AddToggle("RespawnNotify", {
     Default = false
 })
 
-local function ClearAllBinds()
-    ScriptBind:SetValue("None", "Toggle")
-    RemoteBind:SetValue("None", "Toggle")
-    FallBind:SetValue("None", "Toggle")
-    DelayBind:SetValue("None", "Toggle")
-    RespawnBind:SetValue("None", "Toggle")
-end
-
 Tabs.Binds:AddButton({
     Title = "Очистить все бинды",
     Description = "Сбросить все привязки клавиш",
     Callback = function()
-        ClearAllBinds()
+        ScriptBind:SetValue("None", "Toggle")
+        RemoteBind:SetValue("None", "Toggle")
+        FallBind:SetValue("None", "Toggle")
+        DelayBind:SetValue("None", "Toggle")
+        RespawnBind:SetValue("None", "Toggle")
     end
 })
 
@@ -1289,8 +1036,7 @@ ApplyRagdollDelay(Options.RagdollDelay.Value)
 local CoreGui = game:GetService("CoreGui")
 
 local function HookGui(gui)
-    if not gui:IsA("ScreenGui") then return end
-    if gui.Name ~= "ScreenGui" then return end
+    if not gui:IsA("ScreenGui") or gui.Name ~= "ScreenGui" then return end
 
     gui.Destroying:Connect(function()
         pcall(function()
@@ -1316,24 +1062,18 @@ local function HookGui(gui)
             end
 
             for _, conn in pairs(RagdollRespawnHooks) do
-                pcall(function()
-                    conn:Disconnect()
-                end)
+                pcall(function() conn:Disconnect() end)
             end
 
             if RedeemRespawnHook then
-                pcall(function()
-                    RedeemRespawnHook:Disconnect()
-                end)
+                pcall(function() RedeemRespawnHook:Disconnect() end)
                 RedeemRespawnHook = nil
             end
         end)
     end)
 end
 
-for _, g in ipairs(CoreGui:GetChildren()) do
-    HookGui(g)
-end
+for _, g in ipairs(CoreGui:GetChildren()) do HookGui(g) end
 CoreGui.ChildAdded:Connect(HookGui)
 
 SaveManager:SetLibrary(Fluent)
