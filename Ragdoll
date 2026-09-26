@@ -41,6 +41,9 @@ local DuckSelfConnection = nil
 local DuckSelfConnections = {}
 local DuckAllConnections = {}
 local DuckAllWatches = {}
+local MonkeySelfConnections = {}
+local MonkeyAllConnections = {}
+local MonkeyAllWatches = {}
 
 local RedeemItems = {
     { item = "boombox", toggle = nil },
@@ -291,6 +294,22 @@ local function FindQuack(container)
     return quack
 end
 
+local function FindMonkeySounds(container)
+    if not container then return {} end
+    local monkey = container:FindFirstChild("Monkey")
+    if not monkey then return {} end
+    local handle = monkey:FindFirstChild("Handle")
+    if not handle then return {} end
+
+    local sounds = {}
+    for _, v in ipairs(handle:GetChildren()) do
+        if v:IsA("Sound") then
+            table.insert(sounds, v)
+        end
+    end
+    return sounds
+end
+
 local ActivateDuckSelf
 local DeactivateDuckSelf
 
@@ -396,6 +415,141 @@ local function DeactivateDuckAll()
             pcall(function() conn:Disconnect() end)
         end
         DuckAllWatches[player] = nil
+    end
+end
+
+local MonkeySelfConnections = {}
+local MonkeySelfSoundConns = {}
+
+local ActivateMonkeySelf
+local DeactivateMonkeySelf
+
+ActivateMonkeySelf = function()
+    DeactivateMonkeySelf()
+    task.spawn(function()
+        local player = LocalPlayer
+        local backpack = player:WaitForChild("Backpack")
+        local character = player.Character or player.CharacterAdded:Wait()
+
+        local function tryHook(container)
+            local sounds = FindMonkeySounds(container)
+            if #sounds == 0 then return end
+
+            for _, s in ipairs(sounds) do
+                local key = s
+                if MonkeySelfSoundConns[key] then
+                    MonkeySelfSoundConns[key]:Disconnect()
+                    MonkeySelfSoundConns[key] = nil
+                end
+
+                MonkeySelfSoundConns[key] = s:GetPropertyChangedSignal("Playing"):Connect(function()
+                    if s.Playing then ActivateMines() end
+                end)
+            end
+        end
+
+        tryHook(character)
+        tryHook(backpack)
+
+        table.insert(MonkeySelfConnections, backpack.ChildAdded:Connect(function() tryHook(backpack) end))
+        table.insert(MonkeySelfConnections, player.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            tryHook(char)
+            table.insert(MonkeySelfConnections, char.ChildAdded:Connect(function() tryHook(char) end))
+        end))
+    end)
+end
+
+DeactivateMonkeySelf = function()
+    for _, conn in pairs(MonkeySelfSoundConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    MonkeySelfSoundConns = {}
+
+    for _, conn in ipairs(MonkeySelfConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    MonkeySelfConnections = {}
+end
+
+local MonkeyAllConnections = {}
+local MonkeyAllWatches = {}
+
+local function TryHookMonkeySounds(player)
+    if MonkeyAllConnections[player] then return end
+    task.spawn(function()
+        local character = player.Character
+        local backpack = player:FindFirstChildOfClass("Backpack")
+
+        local sounds = FindMonkeySounds(character)
+        if #sounds == 0 then
+            sounds = FindMonkeySounds(backpack)
+        end
+        if #sounds == 0 or MonkeyAllConnections[player] then return end
+
+        MonkeyAllConnections[player] = {}
+        for _, s in ipairs(sounds) do
+            table.insert(MonkeyAllConnections[player], s:GetPropertyChangedSignal("Playing"):Connect(function()
+                if s.Playing then ActivateMines() end
+            end))
+        end
+    end)
+end
+
+local function ActivateMonkeyAll()
+    local function watchPlayer(player)
+        TryHookMonkeySounds(player)
+        if MonkeyAllWatches[player] then return end
+        MonkeyAllWatches[player] = {}
+
+        local function watchContainer(container)
+            if not container then return end
+            table.insert(MonkeyAllWatches[player], container.ChildAdded:Connect(function(child)
+                if child.Name == "Monkey" or child.Name == "Handle" or child.Name == "Sound" then
+                    TryHookMonkeySounds(player)
+                end
+            end))
+        end
+
+        watchContainer(player:FindFirstChildOfClass("Backpack"))
+        watchContainer(player.Character)
+
+        table.insert(MonkeyAllWatches[player], player.ChildAdded:Connect(function(child)
+            if child:IsA("Backpack") then
+                watchContainer(child)
+                TryHookMonkeySounds(player)
+            end
+        end))
+
+        table.insert(MonkeyAllWatches[player], player.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            watchContainer(char)
+            TryHookMonkeySounds(player)
+        end))
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do watchPlayer(player) end
+
+    if not getgenv().MonkeyAllPlayerAddedHooked then
+        getgenv().MonkeyAllPlayerAddedHooked = true
+        Players.PlayerAdded:Connect(function(player)
+            if getgenv().MonkeyAllActive then watchPlayer(player) end
+        end)
+    end
+end
+
+local function DeactivateMonkeyAll()
+    for player, conns in pairs(MonkeyAllConnections) do
+        for _, conn in ipairs(conns) do
+            pcall(function() conn:Disconnect() end)
+        end
+        MonkeyAllConnections[player] = nil
+    end
+    for player, conns in pairs(MonkeyAllWatches) do
+        for _, conn in ipairs(conns) do
+            pcall(function() conn:Disconnect() end)
+        end
+        MonkeyAllWatches[player] = nil
     end
 end
 
@@ -763,6 +917,39 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
     end
 })
 
+local MonkeySelfToggle = nil
+local MonkeyAllToggle = nil
+
+MonkeySelfToggle = Tabs.Misc:AddToggle("MonkeySelfToggle", {
+    Title = "Monkey (self)",
+    Description = "Активировать мины при использовании своего Monkey",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            if MonkeyAllToggle and MonkeyAllToggle.Value then MonkeyAllToggle:SetValue(false) end
+            ActivateMonkeySelf()
+        else
+            DeactivateMonkeySelf()
+        end
+    end
+})
+
+MonkeyAllToggle = Tabs.Misc:AddToggle("MonkeyAllToggle", {
+    Title = "Monkey (all)",
+    Description = "Активировать мины при использовании чужого Monkey",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            if MonkeySelfToggle and MonkeySelfToggle.Value then MonkeySelfToggle:SetValue(false) end
+            getgenv().MonkeyAllActive = true
+            ActivateMonkeyAll()
+        else
+            getgenv().MonkeyAllActive = false
+            DeactivateMonkeyAll()
+        end
+    end
+})
+
 Tabs.Misc:AddButton({
     Title = "Rejoin",
     Description = "Перезайти с автозапуском скрипта",
@@ -1050,6 +1237,8 @@ local function HookGui(gui)
             if Options.CmdrToggle.Value then CmdrToggle:SetValue(false) end
             if Options.DuckSelfToggle.Value then DuckSelfToggle:SetValue(false) end
             if Options.DuckAllToggle.Value then DuckAllToggle:SetValue(false) end
+            if Options.MonkeySelfToggle.Value then MonkeySelfToggle:SetValue(false) end
+            if Options.MonkeyAllToggle.Value then MonkeyAllToggle:SetValue(false) end
             if Options.RedeemQuackToggle.Value then RedeemQuackToggle:SetValue(false) end
             if Options.RedeemLabubuToggle.Value then RedeemLabubuToggle:SetValue(false) end
             if Options.RedeemSignToggle.Value then RedeemSignToggle:SetValue(false) end
