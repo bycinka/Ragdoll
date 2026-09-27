@@ -588,7 +588,19 @@ RegisterRagdollRespawnHook("RagdollRemote", RagdollRemote, ApplyRagdollRemote)
 RegisterRagdollRespawnHook("RagdollFall", RagdollFall, ApplyRagdollFall)
 RegisterRagdollRespawnHook("RagdollDelay", RagdollDelay, ApplyRagdollDelay)
 
-local Headless = Tabs.Heads:AddToggle("Headless", {
+local Headless
+
+Tabs.Heads:AddButton({
+    Title = "Reset",
+    Description = "Сбросить голову и лицо",
+    Callback = function()
+        CurrentFace, CurrentMesh, IsHeadless = nil, nil, false
+        if Headless and Headless.Value then Headless:SetValue(false) end
+        FireAppearance(nil, nil, false, true)
+    end
+})
+
+Headless = Tabs.Heads:AddToggle("Headless", {
     Title = "Headless",
     Default = false,
     Callback = function(v)
@@ -600,16 +612,6 @@ local Headless = Tabs.Heads:AddToggle("Headless", {
         else
             IsHeadless = false
         end
-    end
-})
-
-Tabs.Heads:AddButton({
-    Title = "Reset",
-    Description = "Сбросить голову и лицо",
-    Callback = function()
-        CurrentFace, CurrentMesh, IsHeadless = nil, nil, false
-        if Headless and Headless.Value then Headless:SetValue(false) end
-        FireAppearance(nil, nil, false, true)
     end
 })
 
