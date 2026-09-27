@@ -42,6 +42,7 @@ local DuckSelfConnections = {}
 local DuckAllConnections = {}
 local DuckAllWatches = {}
 local MonkeySelfConnections = {}
+local MonkeySelfSoundConns = {}
 local MonkeyAllConnections = {}
 local MonkeyAllWatches = {}
 
@@ -163,11 +164,19 @@ local function ApplyFakePush()
     local humanoid = char:WaitForChild("Humanoid")
     local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
 
-    local anim = Instance.new("Animation")
-    anim.AnimationId = "rbxassetid://18550756434"
+    local anim1 = Instance.new("Animation")
+    anim1.AnimationId = "rbxassetid://18550756434"
 
-    local track = animator:LoadAnimation(anim)
-    tool.Activated:Connect(function() track:Play() end)
+    local anim2 = Instance.new("Animation")
+    anim2.AnimationId = "rbxassetid://18550760670"
+
+    local track1 = animator:LoadAnimation(anim1)
+    local track2 = animator:LoadAnimation(anim2)
+
+    tool.Activated:Connect(function()
+        track1:Play()
+        track2:Play()
+    end)
 end
 
 local function ApplyRedeem(item)
@@ -418,9 +427,6 @@ local function DeactivateDuckAll()
     end
 end
 
-local MonkeySelfConnections = {}
-local MonkeySelfSoundConns = {}
-
 local ActivateMonkeySelf
 local DeactivateMonkeySelf
 
@@ -436,13 +442,12 @@ ActivateMonkeySelf = function()
             if #sounds == 0 then return end
 
             for _, s in ipairs(sounds) do
-                local key = s
-                if MonkeySelfSoundConns[key] then
-                    MonkeySelfSoundConns[key]:Disconnect()
-                    MonkeySelfSoundConns[key] = nil
+                if MonkeySelfSoundConns[s] then
+                    MonkeySelfSoundConns[s]:Disconnect()
+                    MonkeySelfSoundConns[s] = nil
                 end
 
-                MonkeySelfSoundConns[key] = s:GetPropertyChangedSignal("Playing"):Connect(function()
+                MonkeySelfSoundConns[s] = s:GetPropertyChangedSignal("Playing"):Connect(function()
                     if s.Playing then ActivateMines() end
                 end)
             end
@@ -471,9 +476,6 @@ DeactivateMonkeySelf = function()
     end
     MonkeySelfConnections = {}
 end
-
-local MonkeyAllConnections = {}
-local MonkeyAllWatches = {}
 
 local function TryHookMonkeySounds(player)
     if MonkeyAllConnections[player] then return end
@@ -675,17 +677,6 @@ RegisterRagdollRespawnHook("RagdollRemote", RagdollRemote, ApplyRagdollRemote)
 RegisterRagdollRespawnHook("RagdollFall", RagdollFall, ApplyRagdollFall)
 RegisterRagdollRespawnHook("RagdollDelay", RagdollDelay, ApplyRagdollDelay)
 
-Tabs.Heads:AddButton({
-    Title = "Reset",
-    Description = "Сбросить голову и лицо",
-    Callback = function()
-        CurrentFace = nil
-        CurrentMesh = nil
-        IsHeadless = false
-        FireAppearance(nil, nil, false, true)
-    end
-})
-
 local Headless = Tabs.Heads:AddToggle("Headless", {
     Title = "Headless",
     Default = false,
@@ -698,6 +689,22 @@ local Headless = Tabs.Heads:AddToggle("Headless", {
         else
             IsHeadless = false
         end
+    end
+})
+
+Tabs.Heads:AddButton({
+    Title = "Reset",
+    Description = "Сбросить голову и лицо",
+    Callback = function()
+        CurrentFace = nil
+        CurrentMesh = nil
+        IsHeadless = false
+
+        if Headless and Headless.Value then
+            Headless:SetValue(false)
+        end
+
+        FireAppearance(nil, nil, false, true)
     end
 })
 
