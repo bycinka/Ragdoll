@@ -896,6 +896,21 @@ Tabs.Redeem:AddInput("RedeemDelay", {
     end
 })
 
+local BoomboxToggle, RedeemQuackToggle, RedeemLabubuToggle, RedeemSignToggle, RedeemBcjdoansToggle
+local ActivateAll
+
+ActivateAll = Tabs.Redeem:AddButton({
+    Title = "Activate all",
+    Description = "Включить все redeem тумблеры",
+    Callback = function()
+        if BoomboxToggle and not BoomboxToggle.Value then BoomboxToggle:SetValue(true) end
+        if RedeemQuackToggle and not RedeemQuackToggle.Value then RedeemQuackToggle:SetValue(true) end
+        if RedeemLabubuToggle and not RedeemLabubuToggle.Value then RedeemLabubuToggle:SetValue(true) end
+        if RedeemSignToggle and not RedeemSignToggle.Value then RedeemSignToggle:SetValue(true) end
+        if RedeemBcjdoansToggle and not RedeemBcjdoansToggle.Value then RedeemBcjdoansToggle:SetValue(true) end
+    end
+})
+
 local BoomboxConnection, BoomboxBackpackConn
 
 local function HookBoombox(tool)
@@ -923,7 +938,7 @@ local function DeactivateBoombox()
     if BoomboxBackpackConn then BoomboxBackpackConn:Disconnect() BoomboxBackpackConn = nil end
 end
 
-local BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
+BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
     Title = "Redeem boombox",
     Description = 'Получить "boombox"',
     Default = false,
@@ -931,7 +946,7 @@ local BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
 })
 RedeemItems[1].toggle = BoomboxToggle
 
-local RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
+RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
     Title = "Redeem quack",
     Description = 'Получить "quack"',
     Default = false,
@@ -939,7 +954,7 @@ local RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
 })
 RedeemItems[2].toggle = RedeemQuackToggle
 
-local RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
+RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
     Title = "Redeem labubu",
     Description = 'Получить "labubu"',
     Default = false,
@@ -947,7 +962,7 @@ local RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
 })
 RedeemItems[3].toggle = RedeemLabubuToggle
 
-local RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
+RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
     Title = "Redeem sign",
     Description = 'Получить "sign"',
     Default = false,
@@ -955,7 +970,7 @@ local RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
 })
 RedeemItems[4].toggle = RedeemSignToggle
 
-local RedeemBcjdoansToggle = Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
+RedeemBcjdoansToggle = Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
     Title = "Redeem bcjdoans",
     Description = 'Получить "bcjdoans"',
     Default = false,
