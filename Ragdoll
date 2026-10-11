@@ -655,6 +655,18 @@ Tabs.Ragdoll:AddInput("RagdollDelayValue", {
     Callback = function(v) ApplyDelayValue(v) end
 })
 
+Tabs.Ragdoll:AddButton({
+    Title = "Physics",
+    Description = "Выставить состояние Physics",
+    Callback = function()
+        local char = LP.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+    end
+})
+
 RegisterRagdollRespawnHook("RagdollToggle", RagdollToggle, ApplyRagdollToggle)
 RegisterRagdollRespawnHook("RagdollRemote", RagdollRemote, ApplyRagdollRemote)
 RegisterRagdollRespawnHook("RagdollFall", RagdollFall, ApplyRagdollFall)
@@ -849,8 +861,7 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
             if DuckSelfToggle and DuckSelfToggle.Value then DuckSelfToggle:SetValue(false) end
             getgenv().DuckAllActive = true
             ActivateDuckAll()
-        else
-            getgenv().DuckAllActive = false
+        else            getgenv().DuckAllActive = false
             DeactivateDuckAll()
         end
     end
@@ -904,7 +915,7 @@ Tabs.Misc:AddButton({
 Tabs.Misc:AddButton({Title = "fakepush", Description = "Просто анимация", Callback = function() ApplyFakePush() end})
 
 Tabs.Misc:AddButton({
-    Title = "Speed tool", Description = "E — ускорить, Q — замедлить, Ctrl — снизить вдвое",
+    Title = "Speed tool", Description = "E — ускорить, Q — замедлить, Ctrl — снизить скорость на 80%",
     Callback = function() ApplySpeedTool() end
 })
 
@@ -1055,6 +1066,21 @@ local RespawnBind = Tabs.Binds:AddKeybind("RespawnBind", {
 })
 Tabs.Binds:AddToggle("RespawnNotify", {Title = "Notify respawn teleport", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
+local PhysicsBind = Tabs.Binds:AddKeybind("PhysicsBind", {
+    Title = "Physics bind", Mode = "Toggle", Default = "None",
+    Callback = function()
+        local char = LP.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+        if Options.PhysicsNotify.Value then
+            Fluent:Notify({Title = "Physics", Content = "Активировано", Duration = 3})
+        end
+    end
+})
+Tabs.Binds:AddToggle("PhysicsNotify", {Title = "Notify physics", Description = "Показывать уведомление при нажатии клавиши", Default = false})
+
 Tabs.Binds:AddButton({
     Title = "Очистить все бинды", Description = "Сбросить все привязки клавиш",
     Callback = function()
@@ -1063,6 +1089,7 @@ Tabs.Binds:AddButton({
         FallBind:SetValue("None", "Toggle")
         DelayBind:SetValue("None", "Toggle")
         RespawnBind:SetValue("None", "Toggle")
+        PhysicsBind:SetValue("None", "Toggle")
     end
 })
 
