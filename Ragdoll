@@ -28,21 +28,16 @@ local Options = Fluent.Options
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 local RS = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
 
 local RespawnDelay, AutoUseDelay, RedeemDelay = 0.8, 0.5, 0.1
 
-local AutoUseToggles = {}
-local AutoUseLoops = {}
-local RagdollRespawnHooks = {}
-local RedeemRespawnHook
-local DuckSelfConnection
-local DuckSelfConns = {}
-local DuckAllConns = {}
-local DuckAllWatches = {}
-local MonkeySelfConns = {}
-local MonkeySelfSoundConns = {}
-local MonkeyAllConns = {}
-local MonkeyAllWatches = {}
+local AutoUseToggles, AutoUseLoops, RagdollRespawnHooks = {}, {}, {}
+local RedeemRespawnHook, DuckSelfConnection
+local DuckSelfConns, DuckAllConns, DuckAllWatches = {}, {}, {}
+local MonkeySelfConns, MonkeySelfSoundConns, MonkeyAllConns, MonkeyAllWatches = {}, {}, {}, {}
 
 local RedeemItems = {
     { item = "boombox", toggle = nil },
@@ -103,7 +98,6 @@ local function ActivateMines()
     local minefield = workspace:FindFirstChild("Minefield")
     local mines = minefield and minefield:FindFirstChild("Mines")
     if not mines then return end
-
     for _, v in ipairs(mines:GetDescendants()) do
         if v:IsA("BasePart") then
             pcall(function()
@@ -166,6 +160,123 @@ local function ApplyFakePush()
     end)
 end
 
+local function ApplySpeedTool()
+    local tool = Instance.new("Tool")
+    tool.RequiresHandle = false
+    tool.Name = "SpeedTool"
+    tool.Parent = LP.Backpack
+
+    local baseSpeed, minSpeed, maxSpeed, step = 16, 1, 16, 0.5
+    local speed = baseSpeed
+    local savedSpeed = nil
+    local eHeld, qHeld = false, false
+    local eLoop, qLoop = nil, nil
+    local conns = {}
+
+    local function applySpeed()
+        local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.WalkSpeed = speed end
+    end
+
+    local function setSpeed(v)
+        speed = math.clamp(v, minSpeed, maxSpeed)
+        applySpeed()
+    end
+
+    local function startLoop(key)
+        if key == "E" then
+            if eLoop then return end
+            eLoop = task.spawn(function()
+                while eHeld and tool.Parent == LP.Character do
+                    setSpeed(speed + step)
+                    task.wait(0.1)
+                end
+                eLoop = nil
+            end)
+        else
+            if qLoop then return end
+            qLoop = task.spawn(function()
+                while qHeld and tool.Parent == LP.Character do
+                    setSpeed(speed - step)
+                    task.wait(0.1)
+                end
+                qLoop = nil
+            end)
+        end
+    end
+
+    local function stopLoop(key)
+        if key == "E" then
+            eHeld = false
+            eLoop = nil
+        else
+            qHeld = false
+            qLoop = nil
+        end
+    end
+
+    local function onInput(input, processed)
+        if processed or tool.Parent ~= LP.Character then return end
+        if input.KeyCode == Enum.KeyCode.E then
+            if not eHeld then
+                eHeld = true
+                setSpeed(speed + step)
+                startLoop("E")
+            end
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            if not qHeld then
+                qHeld = true
+                setSpeed(speed - step)
+                startLoop("Q")
+            end
+        elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+            if not savedSpeed then
+                savedSpeed = speed
+                setSpeed(speed / 2)
+            end
+        end
+    end
+
+    local function onInputEnded(input)
+        if input.KeyCode == Enum.KeyCode.E then
+            stopLoop("E")
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            stopLoop("Q")
+        elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+            if savedSpeed then
+                speed = savedSpeed
+                savedSpeed = nil
+                applySpeed()
+            end
+        end
+    end
+
+    table.insert(conns, UIS.InputBegan:Connect(onInput))
+    table.insert(conns, UIS.InputEnded:Connect(onInputEnded))
+
+    tool.Equipped:Connect(function()
+        speed = baseSpeed
+        savedSpeed = nil
+        stopLoop("E")
+        stopLoop("Q")
+        applySpeed()
+    end)
+
+    tool.Unequipped:Connect(function()
+        local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.WalkSpeed = baseSpeed end
+        savedSpeed = nil
+        stopLoop("E")
+        stopLoop("Q")
+    end)
+
+    tool.Destroying:Connect(function()
+        stopLoop("E")
+        stopLoop("Q")
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    end)
+end
+
 local function ApplyRedeem(item)
     local Event = RS:FindFirstChild("Redeem")
     if Event then Event:FireServer(item) end
@@ -201,9 +312,7 @@ local function StartAutoUse(toolName)
     end)
 end
 
-local function StopAutoUse(toolName)
-    AutoUseLoops[toolName] = nil
-end
+local function StopAutoUse(toolName) AutoUseLoops[toolName] = nil end
 
 local AFKHooked = false
 
@@ -229,8 +338,8 @@ end
 
 local function FireRagdollState(value)
     local Events = RS:FindFirstChild("Events")
-    local RagdollState = Events and Events:FindFirstChild("RagdollState")
-    if RagdollState then RagdollState:FireServer(value) end
+    local RS_ = Events and Events:FindFirstChild("RagdollState")
+    if RS_ then RS_:FireServer(value) end
 end
 
 local function ApplyDelayValue(value)
@@ -276,8 +385,7 @@ local function FindMonkeySounds(c)
     return sounds
 end
 
-local ActivateDuckSelf
-local DeactivateDuckSelf
+local ActivateDuckSelf, DeactivateDuckSelf
 
 ActivateDuckSelf = function()
     DeactivateDuckSelf()
@@ -294,8 +402,7 @@ ActivateDuckSelf = function()
             end)
         end
 
-        tryHook(character)
-        tryHook(backpack)
+        tryHook(character) tryHook(backpack)
         table.insert(DuckSelfConns, backpack.ChildAdded:Connect(function() tryHook(backpack) end))
         table.insert(DuckSelfConns, LP.CharacterAdded:Connect(function(char)
             task.wait(0.5)
@@ -307,7 +414,7 @@ end
 
 DeactivateDuckSelf = function()
     if DuckSelfConnection then DuckSelfConnection:Disconnect() DuckSelfConnection = nil end
-    for _, conn in ipairs(DuckSelfConns) do pcall(function() conn:Disconnect() end) end
+    for _, c in ipairs(DuckSelfConns) do pcall(function() c:Disconnect() end) end
     DuckSelfConns = {}
 end
 
@@ -369,8 +476,7 @@ local function DeactivateDuckAll()
     end
 end
 
-local ActivateMonkeySelf
-local DeactivateMonkeySelf
+local ActivateMonkeySelf, DeactivateMonkeySelf
 
 ActivateMonkeySelf = function()
     DeactivateMonkeySelf()
@@ -389,8 +495,7 @@ ActivateMonkeySelf = function()
             end
         end
 
-        tryHook(character)
-        tryHook(backpack)
+        tryHook(character) tryHook(backpack)
         table.insert(MonkeySelfConns, backpack.ChildAdded:Connect(function() tryHook(backpack) end))
         table.insert(MonkeySelfConns, LP.CharacterAdded:Connect(function(char)
             task.wait(0.5)
@@ -413,7 +518,6 @@ local function TryHookMonkeySounds(player)
         local sounds = FindMonkeySounds(player.Character)
         if #sounds == 0 then sounds = FindMonkeySounds(player:FindFirstChildOfClass("Backpack")) end
         if #sounds == 0 or MonkeyAllConns[player] then return end
-
         MonkeyAllConns[player] = {}
         for _, s in ipairs(sounds) do
             table.insert(MonkeyAllConns[player], s:GetPropertyChangedSignal("Playing"):Connect(function()
@@ -474,12 +578,8 @@ Tabs.Tools:AddInput("AutoUseDelay", {
     Title = "Auto use delay",
     Description = "Задержка авто-использования",
     Default = "0.5",
-    Numeric = true,
-    Finished = true,
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then AutoUseDelay = n end
-    end
+    Numeric = true, Finished = true,
+    Callback = function(v) local n = tonumber(v) if n then AutoUseDelay = n end end
 })
 
 Tabs.Tools:AddButton({
@@ -505,7 +605,6 @@ Tabs.Tools:AddButton({
 
 local function BuildToolsTab()
     local backpack = LP:WaitForChild("Backpack")
-
     local function addTool(tool)
         if not tool:IsA("Tool") or AutoUseToggles[tool.Name] then return end
         local toggle
@@ -520,66 +619,39 @@ local function BuildToolsTab()
         })
         AutoUseToggles[tool.Name] = toggle
     end
-
     for _, tool in ipairs(backpack:GetChildren()) do addTool(tool) end
     backpack.ChildAdded:Connect(function(tool) task.wait(0.1) addTool(tool) end)
 end
 
 local RagdollToggle = Tabs.Ragdoll:AddToggle("RagdollToggle", {
-    Title = "Ragdoll script",
-    Description = "Переключить ragdoll скрипт",
-    Default = false,
+    Title = "Ragdoll script", Description = "Переключить ragdoll скрипт", Default = false,
     Callback = function(v)
         if v then ApplyRagdollToggle(true)
-        else
-            task.spawn(function()
-                FreezeCharacter()
-                ApplyRagdollToggle(false)
-                UnfreezeCharacter()
-            end)
-        end
+        else task.spawn(function() FreezeCharacter() ApplyRagdollToggle(false) UnfreezeCharacter() end) end
     end
 })
 
 local RagdollRemote = Tabs.Ragdoll:AddToggle("RagdollRemote", {
-    Title = "Ragdoll remote",
-    Description = "Переключить ragdoll remote",
-    Default = false,
+    Title = "Ragdoll remote", Description = "Переключить ragdoll remote", Default = false,
     Callback = function(v) ApplyRagdollRemote(v) end
 })
 
 local RagdollFall = Tabs.Ragdoll:AddToggle("RagdollFall", {
-    Title = "Ragdoll fall",
-    Description = "Отключить ragdoll при падении",
-    Default = false,
+    Title = "Ragdoll fall", Description = "Отключить ragdoll при падении", Default = false,
     Callback = function(v) ApplyRagdollFall(v) end
 })
 
 local RagdollDelay = Tabs.Ragdoll:AddToggle("RagdollDelay", {
-    Title = "Ragdoll delay",
-    Description = "Отключить задержку ragdoll",
-    Default = true,
+    Title = "Ragdoll delay", Description = "Отключить задержку ragdoll", Default = true,
     Callback = function(v) ApplyRagdollDelay(v) end
 })
 
-Tabs.Ragdoll:AddButton({
-    Title = "Ragdoll state true",
-    Description = "Отправить RagdollState: true",
-    Callback = function() FireRagdollState(true) end
-})
-
-Tabs.Ragdoll:AddButton({
-    Title = "Ragdoll state false",
-    Description = "Отправить RagdollState: false",
-    Callback = function() FireRagdollState(false) end
-})
+Tabs.Ragdoll:AddButton({Title = "Ragdoll state true", Description = "Отправить RagdollState: true", Callback = function() FireRagdollState(true) end})
+Tabs.Ragdoll:AddButton({Title = "Ragdoll state false", Description = "Отправить RagdollState: false", Callback = function() FireRagdollState(false) end})
 
 Tabs.Ragdoll:AddInput("RagdollDelayValue", {
-    Title = "Delay value",
-    Description = "Изменить значение Delay",
-    Default = "0",
-    Numeric = true,
-    Finished = true,
+    Title = "Delay value", Description = "Изменить значение Delay", Default = "0",
+    Numeric = true, Finished = true,
     Callback = function(v) ApplyDelayValue(v) end
 })
 
@@ -591,8 +663,7 @@ RegisterRagdollRespawnHook("RagdollDelay", RagdollDelay, ApplyRagdollDelay)
 local Headless
 
 Tabs.Heads:AddButton({
-    Title = "Reset",
-    Description = "Сбросить голову и лицо",
+    Title = "Reset", Description = "Сбросить голову и лицо",
     Callback = function()
         CurrentFace, CurrentMesh, IsHeadless = nil, nil, false
         if Headless and Headless.Value then Headless:SetValue(false) end
@@ -601,17 +672,14 @@ Tabs.Heads:AddButton({
 })
 
 Headless = Tabs.Heads:AddToggle("Headless", {
-    Title = "Headless",
-    Default = false,
+    Title = "Headless", Default = false,
     Callback = function(v)
         if v then
             IsHeadless = true
             CurrentMesh = nil
             CurrentFace = nil
             FireAppearance(nil, nil, true, false)
-        else
-            IsHeadless = false
-        end
+        else IsHeadless = false end
     end
 })
 
@@ -698,7 +766,6 @@ task.defer(function()
         frame.AutomaticSize = Enum.AutomaticSize.Y
         frame.LayoutOrder = order
         frame.Parent = scroll
-
         local grid = Instance.new("UIGridLayout")
         grid.CellSize = UDim2.fromOffset(70, 70)
         grid.CellPadding = UDim2.fromOffset(6, 6)
@@ -738,81 +805,45 @@ task.defer(function()
 end)
 
 Tabs.Misc:AddInput("FpsCap", {
-    Title = "FPS Cap",
-    Description = "Установить лимит FPS",
-    Default = GetCurrentFpsCap(),
-    Numeric = true,
-    Finished = true,
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then setfpscap(n) end
-    end
+    Title = "FPS Cap", Description = "Установить лимит FPS",
+    Default = GetCurrentFpsCap(), Numeric = true, Finished = true,
+    Callback = function(v) local n = tonumber(v) if n then setfpscap(n) end end
 })
 
-Tabs.Misc:AddButton({
-    Title = "Respawn teleport",
-    Description = "Возродиться на том же месте",
-    Callback = function() TeleportRespawn() end
-})
+Tabs.Misc:AddButton({Title = "Respawn teleport", Description = "Возродиться на том же месте", Callback = function() TeleportRespawn() end})
 
 Tabs.Misc:AddInput("RespawnDelay", {
-    Title = "Respawn delay",
-    Description = "Задержка перед телепортом",
-    Default = "0.8",
-    Placeholder = "0.8",
-    Numeric = true,
-    Finished = true,
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then RespawnDelay = n end
-    end
+    Title = "Respawn delay", Description = "Задержка перед телепортом",
+    Default = "0.8", Placeholder = "0.8", Numeric = true, Finished = true,
+    Callback = function(v) local n = tonumber(v) if n then RespawnDelay = n end end
 })
 
 local AFKToggle = Tabs.Misc:AddToggle("AFKBlock", {
-    Title = "AFK Block",
-    Description = "Блокировать отправку AFK",
-    Default = false,
+    Title = "AFK Block", Description = "Блокировать отправку AFK", Default = false,
     Callback = function(v) ApplyAFKBlock(v) end
 })
 
-Tabs.Misc:AddButton({
-    Title = "AFK true",
-    Description = "Отправить AFK: true",
-    Callback = function() FireAFK(true) end
-})
-
-Tabs.Misc:AddButton({
-    Title = "AFK false",
-    Description = "Отправить AFK: false",
-    Callback = function() FireAFK(false) end
-})
+Tabs.Misc:AddButton({Title = "AFK true", Description = "Отправить AFK: true", Callback = function() FireAFK(true) end})
+Tabs.Misc:AddButton({Title = "AFK false", Description = "Отправить AFK: false", Callback = function() FireAFK(false) end})
 
 local CmdrToggle = Tabs.Misc:AddToggle("CmdrToggle", {
-    Title = "Disable Cmdr",
-    Description = "Отключить командную строку (F2)",
-    Default = true,
+    Title = "Disable Cmdr", Description = "Отключить командную строку (F2)", Default = true,
     Callback = function(v) ApplyCmdrToggle(v) end
 })
 
 local DuckSelfToggle, DuckAllToggle
 DuckSelfToggle = Tabs.Misc:AddToggle("DuckSelfToggle", {
-    Title = "Duck (self)",
-    Description = "Активировать мины при использовании своего DuckProp",
-    Default = false,
+    Title = "Duck (self)", Description = "Активировать мины при использовании своего DuckProp", Default = false,
     Callback = function(v)
         if v then
             if DuckAllToggle and DuckAllToggle.Value then DuckAllToggle:SetValue(false) end
             ActivateDuckSelf()
-        else
-            DeactivateDuckSelf()
-        end
+        else DeactivateDuckSelf() end
     end
 })
 
 DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
-    Title = "Duck (all)",
-    Description = "Активировать мины при использовании чужого DuckProp",
-    Default = false,
+    Title = "Duck (all)", Description = "Активировать мины при использовании чужого DuckProp", Default = false,
     Callback = function(v)
         if v then
             if DuckSelfToggle and DuckSelfToggle.Value then DuckSelfToggle:SetValue(false) end
@@ -827,23 +858,17 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
 
 local MonkeySelfToggle, MonkeyAllToggle
 MonkeySelfToggle = Tabs.Misc:AddToggle("MonkeySelfToggle", {
-    Title = "Monkey (self)",
-    Description = "Активировать мины при использовании своего Monkey",
-    Default = false,
+    Title = "Monkey (self)", Description = "Активировать мины при использовании своего Monkey", Default = false,
     Callback = function(v)
         if v then
             if MonkeyAllToggle and MonkeyAllToggle.Value then MonkeyAllToggle:SetValue(false) end
             ActivateMonkeySelf()
-        else
-            DeactivateMonkeySelf()
-        end
+        else DeactivateMonkeySelf() end
     end
 })
 
 MonkeyAllToggle = Tabs.Misc:AddToggle("MonkeyAllToggle", {
-    Title = "Monkey (all)",
-    Description = "Активировать мины при использовании чужого Monkey",
-    Default = false,
+    Title = "Monkey (all)", Description = "Активировать мины при использовании чужого Monkey", Default = false,
     Callback = function(v)
         if v then
             if MonkeySelfToggle and MonkeySelfToggle.Value then MonkeySelfToggle:SetValue(false) end
@@ -857,10 +882,8 @@ MonkeyAllToggle = Tabs.Misc:AddToggle("MonkeyAllToggle", {
 })
 
 Tabs.Misc:AddButton({
-    Title = "Rejoin",
-    Description = "Перезайти с автозапуском скрипта",
+    Title = "Rejoin", Description = "Перезайти с автозапуском скрипта",
     Callback = function()
-        local TS = game:GetService("TeleportService")
         if queue_on_teleport then
             queue_on_teleport([[
                 loadstring(game:HttpGet("https://raw.githubusercontent.com/bycinka/Ragdoll/refs/heads/main/Ragdoll"))()
@@ -878,30 +901,23 @@ Tabs.Misc:AddButton({
     end
 })
 
+Tabs.Misc:AddButton({Title = "fakepush", Description = "Просто анимация", Callback = function() ApplyFakePush() end})
+
 Tabs.Misc:AddButton({
-    Title = "fakepush",
-    Description = "Просто анимация",
-    Callback = function() ApplyFakePush() end
+    Title = "Speed tool", Description = "E — ускорить, Q — замедлить, Ctrl — снизить вдвое",
+    Callback = function() ApplySpeedTool() end
 })
 
 Tabs.Redeem:AddInput("RedeemDelay", {
-    Title = "Redeem delay",
-    Description = "Задержка тумблеров",
-    Default = "0.1",
-    Numeric = true,
-    Finished = true,
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then RedeemDelay = n end
-    end
+    Title = "Redeem delay", Description = "Задержка тумблеров",
+    Default = "0.1", Numeric = true, Finished = true,
+    Callback = function(v) local n = tonumber(v) if n then RedeemDelay = n end end
 })
 
 local BoomboxToggle, RedeemQuackToggle, RedeemLabubuToggle, RedeemSignToggle, RedeemBcjdoansToggle
-local ActivateAll
 
-ActivateAll = Tabs.Redeem:AddButton({
-    Title = "Activate all",
-    Description = "Включить все redeem тумблеры",
+Tabs.Redeem:AddButton({
+    Title = "Activate all", Description = "Включить все redeem тумблеры",
     Callback = function()
         if BoomboxToggle and not BoomboxToggle.Value then BoomboxToggle:SetValue(true) end
         if RedeemQuackToggle and not RedeemQuackToggle.Value then RedeemQuackToggle:SetValue(true) end
@@ -939,41 +955,31 @@ local function DeactivateBoombox()
 end
 
 BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
-    Title = "Redeem boombox",
-    Description = 'Получить "boombox"',
-    Default = false,
+    Title = "Redeem boombox", Description = 'Получить "boombox"', Default = false,
     Callback = function(v) if v then ActivateBoombox() else DeactivateBoombox() end end
 })
 RedeemItems[1].toggle = BoomboxToggle
 
 RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
-    Title = "Redeem quack",
-    Description = 'Получить "quack"',
-    Default = false,
+    Title = "Redeem quack", Description = 'Получить "quack"', Default = false,
     Callback = function(v) if v then ApplyRedeem("quack") end end
 })
 RedeemItems[2].toggle = RedeemQuackToggle
 
 RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
-    Title = "Redeem labubu",
-    Description = 'Получить "labubu"',
-    Default = false,
+    Title = "Redeem labubu", Description = 'Получить "labubu"', Default = false,
     Callback = function(v) if v then ApplyRedeem("labubu") end end
 })
 RedeemItems[3].toggle = RedeemLabubuToggle
 
 RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
-    Title = "Redeem sign",
-    Description = 'Получить "sign"',
-    Default = false,
+    Title = "Redeem sign", Description = 'Получить "sign"', Default = false,
     Callback = function(v) if v then ApplyRedeem("sign") end end
 })
 RedeemItems[4].toggle = RedeemSignToggle
 
 RedeemBcjdoansToggle = Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
-    Title = "Redeem bcjdoans",
-    Description = 'Получить "bcjdoans"',
-    Default = false,
+    Title = "Redeem bcjdoans", Description = 'Получить "bcjdoans"', Default = false,
     Callback = function(v) if v then ApplyRedeem("bcjdoans") end end
 })
 RedeemItems[5].toggle = RedeemBcjdoansToggle
@@ -995,9 +1001,7 @@ end)
 BuildToolsTab()
 
 local ScriptBind = Tabs.Binds:AddKeybind("ScriptBind", {
-    Title = "Ragdoll script bind",
-    Mode = "Toggle",
-    Default = "None",
+    Title = "Ragdoll script bind", Mode = "Toggle", Default = "None",
     Callback = function()
         RagdollToggle:SetValue(not RagdollToggle.Value)
         if Options.ScriptNotify.Value then
@@ -1008,9 +1012,7 @@ local ScriptBind = Tabs.Binds:AddKeybind("ScriptBind", {
 Tabs.Binds:AddToggle("ScriptNotify", {Title = "Notify ragdoll", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
 local RemoteBind = Tabs.Binds:AddKeybind("RemoteBind", {
-    Title = "Ragdoll remote bind",
-    Mode = "Toggle",
-    Default = "None",
+    Title = "Ragdoll remote bind", Mode = "Toggle", Default = "None",
     Callback = function()
         RagdollRemote:SetValue(not RagdollRemote.Value)
         if Options.RemoteNotify.Value then
@@ -1021,9 +1023,7 @@ local RemoteBind = Tabs.Binds:AddKeybind("RemoteBind", {
 Tabs.Binds:AddToggle("RemoteNotify", {Title = "Notify ragdoll remote", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
 local FallBind = Tabs.Binds:AddKeybind("FallBind", {
-    Title = "Ragdoll fall bind",
-    Mode = "Toggle",
-    Default = "None",
+    Title = "Ragdoll fall bind", Mode = "Toggle", Default = "None",
     Callback = function()
         RagdollFall:SetValue(not RagdollFall.Value)
         if Options.FallNotify.Value then
@@ -1034,9 +1034,7 @@ local FallBind = Tabs.Binds:AddKeybind("FallBind", {
 Tabs.Binds:AddToggle("FallNotify", {Title = "Notify ragdoll fall", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
 local DelayBind = Tabs.Binds:AddKeybind("DelayBind", {
-    Title = "Ragdoll delay bind",
-    Mode = "Toggle",
-    Default = "None",
+    Title = "Ragdoll delay bind", Mode = "Toggle", Default = "None",
     Callback = function()
         RagdollDelay:SetValue(not RagdollDelay.Value)
         if Options.DelayNotify.Value then
@@ -1047,9 +1045,7 @@ local DelayBind = Tabs.Binds:AddKeybind("DelayBind", {
 Tabs.Binds:AddToggle("DelayNotify", {Title = "Notify ragdoll delay", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
 local RespawnBind = Tabs.Binds:AddKeybind("RespawnBind", {
-    Title = "Respawn teleport bind",
-    Mode = "Toggle",
-    Default = "None",
+    Title = "Respawn teleport bind", Mode = "Toggle", Default = "None",
     Callback = function()
         TeleportRespawn()
         if Options.RespawnNotify.Value then
@@ -1060,8 +1056,7 @@ local RespawnBind = Tabs.Binds:AddKeybind("RespawnBind", {
 Tabs.Binds:AddToggle("RespawnNotify", {Title = "Notify respawn teleport", Description = "Показывать уведомление при нажатии клавиши", Default = false})
 
 Tabs.Binds:AddButton({
-    Title = "Очистить все бинды",
-    Description = "Сбросить все привязки клавиш",
+    Title = "Очистить все бинды", Description = "Сбросить все привязки клавиш",
     Callback = function()
         ScriptBind:SetValue("None", "Toggle")
         RemoteBind:SetValue("None", "Toggle")
@@ -1075,8 +1070,6 @@ ApplyRagdollToggle(Options.RagdollToggle.Value)
 ApplyRagdollRemote(Options.RagdollRemote.Value)
 ApplyRagdollFall(Options.RagdollFall.Value)
 ApplyRagdollDelay(Options.RagdollDelay.Value)
-
-local CoreGui = game:GetService("CoreGui")
 
 local function HookGui(gui)
     if not gui:IsA("ScreenGui") or gui.Name ~= "ScreenGui" then return end
