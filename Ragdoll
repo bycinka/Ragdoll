@@ -232,7 +232,7 @@ local function ApplySpeedTool()
         elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
             if not savedSpeed then
                 savedSpeed = speed
-                setSpeed(speed / 2)
+                setSpeed(speed * 0.2)
             end
         end
     end
