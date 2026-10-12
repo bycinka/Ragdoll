@@ -919,6 +919,18 @@ Tabs.Misc:AddButton({
     Callback = function() ApplySpeedTool() end
 })
 
+Tabs.Misc:AddButton({
+    Title = "Sit",
+    Description = "Усадить персонажа",
+    Callback = function()
+        local char = LP.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        humanoid.Sit = true
+    end
+})
+
 Tabs.Redeem:AddInput("RedeemDelay", {
     Title = "Redeem delay", Description = "Задержка тумблеров",
     Default = "0.1", Numeric = true, Finished = true,
