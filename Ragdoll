@@ -39,6 +39,42 @@ local RedeemRespawnHook, DuckSelfConnection
 local DuckSelfConns, DuckAllConns, DuckAllWatches = {}, {}, {}
 local MonkeySelfConns, MonkeySelfSoundConns, MonkeyAllConns, MonkeyAllWatches = {}, {}, {}, {}
 
+local AllToggles = {}
+local AllHooks = {}
+
+local function TrackToggle(toggle)
+    if toggle then table.insert(AllToggles, toggle) end
+    return toggle
+end
+
+local function TrackHook(conn)
+    if conn then table.insert(AllHooks, conn) end
+    return conn
+end
+
+local function DisableAll()
+    for _, t in ipairs(AllToggles) do
+        pcall(function()
+            if t and t.Value then t:SetValue(false) end
+        end)
+    end
+    for _, c in ipairs(AllHooks) do
+        pcall(function() c:Disconnect() end)
+    end
+    for _, t in pairs(AutoUseToggles) do
+        pcall(function() if t.Value then t:SetValue(false) end end)
+    end
+    if RedeemRespawnHook then
+        pcall(function() RedeemRespawnHook:Disconnect() end)
+        RedeemRespawnHook = nil
+    end
+    getgenv().CoilSpeedEnabled = false
+    getgenv().DuckAllActive = false
+    getgenv().MonkeyAllActive = false
+    local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then humanoid.WalkSpeed = 16 end
+end
+
 local RedeemItems = {
     { item = "boombox", toggle = nil },
     { item = "quack", toggle = nil },
@@ -274,6 +310,166 @@ local function ApplySpeedTool()
         stopLoop("E")
         stopLoop("Q")
         for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    end)
+end
+
+local CoilSpeedConn = nil
+
+local function ApplyCoilSpeedTool()
+    if CoilSpeedConn then CoilSpeedConn:Disconnect() CoilSpeedConn = nil end
+    getgenv().CoilSpeedEnabled = true
+
+    local minSpeed, step = 1, 0.5
+    local speed = 16
+    local maxSpeed = 16
+    local savedSpeed = nil
+    local eHeld, qHeld = false, false
+    local eLoop, qLoop = nil, nil
+    local currentTool = nil
+    local conns = {}
+
+    local function applySpeed()
+        local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.WalkSpeed = speed end
+    end
+
+    local function setSpeed(v)
+        speed = math.clamp(v, minSpeed, maxSpeed)
+        applySpeed()
+    end
+
+    local function hasCoil()
+        local char = LP.Character
+        if not char then return false end
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and string.find(string.lower(tool.Name), "coil") then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function startLoop(key)
+        if key == "E" then
+            if eLoop then return end
+            eLoop = task.spawn(function()
+                while eHeld and hasCoil() do
+                    setSpeed(speed + step)
+                    task.wait(0.1)
+                end
+                eLoop = nil
+            end)
+        else
+            if qLoop then return end
+            qLoop = task.spawn(function()
+                while qHeld and hasCoil() do
+                    setSpeed(speed - step)
+                    task.wait(0.1)
+                end
+                qLoop = nil
+            end)
+        end
+    end
+
+    local function stopLoop(key)
+        if key == "E" then
+            eHeld = false
+            eLoop = nil
+        else
+            qHeld = false
+            qLoop = nil
+        end
+    end
+
+    local function onInput(input, processed)
+        if processed or not getgenv().CoilSpeedEnabled then return end
+        if not hasCoil() then return end
+
+        if input.KeyCode == Enum.KeyCode.E then
+            if not eHeld then
+                eHeld = true
+                setSpeed(speed + step)
+                startLoop("E")
+            end
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            if not qHeld then
+                qHeld = true
+                setSpeed(speed - step)
+                startLoop("Q")
+            end
+        elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+            if not savedSpeed then
+                savedSpeed = speed
+                setSpeed(speed * 0.2)
+            end
+        end
+    end
+
+    local function onInputEnded(input)
+        if input.KeyCode == Enum.KeyCode.E then
+            stopLoop("E")
+        elseif input.KeyCode == Enum.KeyCode.Q then
+            stopLoop("Q")
+        elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+            if savedSpeed then
+                speed = savedSpeed
+                savedSpeed = nil
+                applySpeed()
+            end
+        end
+    end
+
+    table.insert(conns, UIS.InputBegan:Connect(onInput))
+    table.insert(conns, UIS.InputEnded:Connect(onInputEnded))
+
+    CoilSpeedConn = LP.CharacterAdded:Connect(function(char)
+        task.wait(0.5)
+        savedSpeed = nil
+        stopLoop("E")
+        stopLoop("Q")
+    end)
+
+    task.spawn(function()
+        while getgenv().CoilSpeedEnabled do
+            task.wait(0.05)
+            local char = LP.Character
+            if not char then continue end
+            local coil = nil
+            for _, tool in ipairs(char:GetChildren()) do
+                if tool:IsA("Tool") and string.find(string.lower(tool.Name), "coil") then
+                    coil = tool
+                    break
+                end
+            end
+
+            if coil and currentTool ~= coil then
+                currentTool = coil
+                task.spawn(function()
+                    task.wait(0.1)
+                    if currentTool ~= coil then return end
+                    local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+                    if h then
+                        maxSpeed = h.WalkSpeed
+                        speed = h.WalkSpeed
+                        applySpeed()
+                    end
+                end)
+                savedSpeed = nil
+            elseif not coil and currentTool then
+                currentTool = nil
+                speed = 16
+                maxSpeed = 16
+                savedSpeed = nil
+                stopLoop("E")
+                stopLoop("Q")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then humanoid.WalkSpeed = 16 end
+            end
+        end
+
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+        local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.WalkSpeed = 16 end
     end)
 end
 
@@ -623,28 +819,28 @@ local function BuildToolsTab()
     backpack.ChildAdded:Connect(function(tool) task.wait(0.1) addTool(tool) end)
 end
 
-local RagdollToggle = Tabs.Ragdoll:AddToggle("RagdollToggle", {
+local RagdollToggle = TrackToggle(Tabs.Ragdoll:AddToggle("RagdollToggle", {
     Title = "Ragdoll script", Description = "Переключить ragdoll скрипт", Default = false,
     Callback = function(v)
         if v then ApplyRagdollToggle(true)
         else task.spawn(function() FreezeCharacter() ApplyRagdollToggle(false) UnfreezeCharacter() end) end
     end
-})
+}))
 
-local RagdollRemote = Tabs.Ragdoll:AddToggle("RagdollRemote", {
+local RagdollRemote = TrackToggle(Tabs.Ragdoll:AddToggle("RagdollRemote", {
     Title = "Ragdoll remote", Description = "Переключить ragdoll remote", Default = false,
     Callback = function(v) ApplyRagdollRemote(v) end
-})
+}))
 
-local RagdollFall = Tabs.Ragdoll:AddToggle("RagdollFall", {
+local RagdollFall = TrackToggle(Tabs.Ragdoll:AddToggle("RagdollFall", {
     Title = "Ragdoll fall", Description = "Отключить ragdoll при падении", Default = false,
     Callback = function(v) ApplyRagdollFall(v) end
-})
+}))
 
-local RagdollDelay = Tabs.Ragdoll:AddToggle("RagdollDelay", {
+local RagdollDelay = TrackToggle(Tabs.Ragdoll:AddToggle("RagdollDelay", {
     Title = "Ragdoll delay", Description = "Отключить задержку ragdoll", Default = true,
     Callback = function(v) ApplyRagdollDelay(v) end
-})
+}))
 
 Tabs.Ragdoll:AddButton({Title = "Ragdoll state true", Description = "Отправить RagdollState: true", Callback = function() FireRagdollState(true) end})
 Tabs.Ragdoll:AddButton({Title = "Ragdoll state false", Description = "Отправить RagdollState: false", Callback = function() FireRagdollState(false) end})
@@ -683,7 +879,7 @@ Tabs.Heads:AddButton({
     end
 })
 
-Headless = Tabs.Heads:AddToggle("Headless", {
+Headless = TrackToggle(Tabs.Heads:AddToggle("Headless", {
     Title = "Headless", Default = false,
     Callback = function(v)
         if v then
@@ -693,7 +889,7 @@ Headless = Tabs.Heads:AddToggle("Headless", {
             FireAppearance(nil, nil, true, false)
         else IsHeadless = false end
     end
-})
+}))
 
 LP.CharacterAdded:Connect(function()
     task.wait(0.5)
@@ -830,21 +1026,21 @@ Tabs.Misc:AddInput("RespawnDelay", {
     Callback = function(v) local n = tonumber(v) if n then RespawnDelay = n end end
 })
 
-local AFKToggle = Tabs.Misc:AddToggle("AFKBlock", {
+local AFKToggle = TrackToggle(Tabs.Misc:AddToggle("AFKBlock", {
     Title = "AFK Block", Description = "Блокировать отправку AFK", Default = false,
     Callback = function(v) ApplyAFKBlock(v) end
-})
+}))
 
 Tabs.Misc:AddButton({Title = "AFK true", Description = "Отправить AFK: true", Callback = function() FireAFK(true) end})
 Tabs.Misc:AddButton({Title = "AFK false", Description = "Отправить AFK: false", Callback = function() FireAFK(false) end})
 
-local CmdrToggle = Tabs.Misc:AddToggle("CmdrToggle", {
+local CmdrToggle = TrackToggle(Tabs.Misc:AddToggle("CmdrToggle", {
     Title = "Disable Cmdr", Description = "Отключить командную строку (F2)", Default = true,
     Callback = function(v) ApplyCmdrToggle(v) end
-})
+}))
 
 local DuckSelfToggle, DuckAllToggle
-DuckSelfToggle = Tabs.Misc:AddToggle("DuckSelfToggle", {
+DuckSelfToggle = TrackToggle(Tabs.Misc:AddToggle("DuckSelfToggle", {
     Title = "Duck (self)", Description = "Активировать мины при использовании своего DuckProp", Default = false,
     Callback = function(v)
         if v then
@@ -852,9 +1048,9 @@ DuckSelfToggle = Tabs.Misc:AddToggle("DuckSelfToggle", {
             ActivateDuckSelf()
         else DeactivateDuckSelf() end
     end
-})
+}))
 
-DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
+DuckAllToggle = TrackToggle(Tabs.Misc:AddToggle("DuckAllToggle", {
     Title = "Duck (all)", Description = "Активировать мины при использовании чужого DuckProp", Default = false,
     Callback = function(v)
         if v then
@@ -865,10 +1061,10 @@ DuckAllToggle = Tabs.Misc:AddToggle("DuckAllToggle", {
             DeactivateDuckAll()
         end
     end
-})
+}))
 
 local MonkeySelfToggle, MonkeyAllToggle
-MonkeySelfToggle = Tabs.Misc:AddToggle("MonkeySelfToggle", {
+MonkeySelfToggle = TrackToggle(Tabs.Misc:AddToggle("MonkeySelfToggle", {
     Title = "Monkey (self)", Description = "Активировать мины при использовании своего Monkey", Default = false,
     Callback = function(v)
         if v then
@@ -876,9 +1072,9 @@ MonkeySelfToggle = Tabs.Misc:AddToggle("MonkeySelfToggle", {
             ActivateMonkeySelf()
         else DeactivateMonkeySelf() end
     end
-})
+}))
 
-MonkeyAllToggle = Tabs.Misc:AddToggle("MonkeyAllToggle", {
+MonkeyAllToggle = TrackToggle(Tabs.Misc:AddToggle("MonkeyAllToggle", {
     Title = "Monkey (all)", Description = "Активировать мины при использовании чужого Monkey", Default = false,
     Callback = function(v)
         if v then
@@ -890,7 +1086,7 @@ MonkeyAllToggle = Tabs.Misc:AddToggle("MonkeyAllToggle", {
             DeactivateMonkeyAll()
         end
     end
-})
+}))
 
 Tabs.Misc:AddButton({
     Title = "Rejoin", Description = "Перезайти с автозапуском скрипта",
@@ -930,6 +1126,19 @@ Tabs.Misc:AddButton({
         humanoid.Sit = true
     end
 })
+
+local CoilSpeedToggle = TrackToggle(Tabs.Misc:AddToggle("CoilSpeedToggle", {
+    Title = "Coil speed control",
+    Description = "E — ускорить, Q — замедлить, Ctrl — временно снизить",
+    Default = false,
+    Callback = function(v)
+        if v then
+            ApplyCoilSpeedTool()
+        else
+            getgenv().CoilSpeedEnabled = false
+        end
+    end
+}))
 
 Tabs.Redeem:AddInput("RedeemDelay", {
     Title = "Redeem delay", Description = "Задержка тумблеров",
@@ -977,37 +1186,37 @@ local function DeactivateBoombox()
     if BoomboxBackpackConn then BoomboxBackpackConn:Disconnect() BoomboxBackpackConn = nil end
 end
 
-BoomboxToggle = Tabs.Redeem:AddToggle("BoomboxRedeem", {
+BoomboxToggle = TrackToggle(Tabs.Redeem:AddToggle("BoomboxRedeem", {
     Title = "Redeem boombox", Description = 'Получить "boombox"', Default = false,
     Callback = function(v) if v then ActivateBoombox() else DeactivateBoombox() end end
-})
+}))
 RedeemItems[1].toggle = BoomboxToggle
 
-RedeemQuackToggle = Tabs.Redeem:AddToggle("RedeemQuackToggle", {
+RedeemQuackToggle = TrackToggle(Tabs.Redeem:AddToggle("RedeemQuackToggle", {
     Title = "Redeem quack", Description = 'Получить "quack"', Default = false,
     Callback = function(v) if v then ApplyRedeem("quack") end end
-})
+}))
 RedeemItems[2].toggle = RedeemQuackToggle
 
-RedeemLabubuToggle = Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
+RedeemLabubuToggle = TrackToggle(Tabs.Redeem:AddToggle("RedeemLabubuToggle", {
     Title = "Redeem labubu", Description = 'Получить "labubu"', Default = false,
     Callback = function(v) if v then ApplyRedeem("labubu") end end
-})
+}))
 RedeemItems[3].toggle = RedeemLabubuToggle
 
-RedeemSignToggle = Tabs.Redeem:AddToggle("RedeemSignToggle", {
+RedeemSignToggle = TrackToggle(Tabs.Redeem:AddToggle("RedeemSignToggle", {
     Title = "Redeem sign", Description = 'Получить "sign"', Default = false,
     Callback = function(v) if v then ApplyRedeem("sign") end end
-})
+}))
 RedeemItems[4].toggle = RedeemSignToggle
 
-RedeemBcjdoansToggle = Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
+RedeemBcjdoansToggle = TrackToggle(Tabs.Redeem:AddToggle("RedeemBcjdoansToggle", {
     Title = "Redeem bcjdoans", Description = 'Получить "bcjdoans"', Default = false,
     Callback = function(v) if v then ApplyRedeem("bcjdoans") end end
-})
+}))
 RedeemItems[5].toggle = RedeemBcjdoansToggle
 
-RedeemRespawnHook = LP.CharacterAdded:Connect(function()
+RedeemRespawnHook = TrackHook(LP.CharacterAdded:Connect(function()
     task.wait(0.5)
     for _, entry in ipairs(RedeemItems) do
         if entry.toggle and entry.toggle.Value then
@@ -1019,7 +1228,7 @@ RedeemRespawnHook = LP.CharacterAdded:Connect(function()
             end
         end
     end
-end)
+end))
 
 BuildToolsTab()
 
@@ -1113,35 +1322,7 @@ ApplyRagdollDelay(Options.RagdollDelay.Value)
 local function HookGui(gui)
     if not gui:IsA("ScreenGui") or gui.Name ~= "ScreenGui" then return end
     gui.Destroying:Connect(function()
-        pcall(function()
-            if Options.RagdollToggle.Value then RagdollToggle:SetValue(false) end
-            if Options.RagdollRemote.Value then RagdollRemote:SetValue(false) end
-            if Options.RagdollFall.Value then RagdollFall:SetValue(false) end
-            if Options.RagdollDelay.Value then RagdollDelay:SetValue(false) end
-            if Options.Headless.Value then Headless:SetValue(false) end
-            if Options.BoomboxRedeem.Value then BoomboxToggle:SetValue(false) end
-            if Options.AFKBlock.Value then AFKToggle:SetValue(false) end
-            if Options.CmdrToggle.Value then CmdrToggle:SetValue(false) end
-            if Options.DuckSelfToggle.Value then DuckSelfToggle:SetValue(false) end
-            if Options.DuckAllToggle.Value then DuckAllToggle:SetValue(false) end
-            if Options.MonkeySelfToggle.Value then MonkeySelfToggle:SetValue(false) end
-            if Options.MonkeyAllToggle.Value then MonkeyAllToggle:SetValue(false) end
-            if Options.RedeemQuackToggle.Value then RedeemQuackToggle:SetValue(false) end
-            if Options.RedeemLabubuToggle.Value then RedeemLabubuToggle:SetValue(false) end
-            if Options.RedeemSignToggle.Value then RedeemSignToggle:SetValue(false) end
-            if Options.RedeemBcjdoansToggle.Value then RedeemBcjdoansToggle:SetValue(false) end
-
-            for _, t in pairs(AutoUseToggles) do
-                pcall(function() if t.Value then t:SetValue(false) end end)
-            end
-            for _, c in pairs(RagdollRespawnHooks) do
-                pcall(function() c:Disconnect() end)
-            end
-            if RedeemRespawnHook then
-                pcall(function() RedeemRespawnHook:Disconnect() end)
-                RedeemRespawnHook = nil
-            end
-        end)
+        pcall(DisableAll)
     end)
 end
 
