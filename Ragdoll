@@ -321,11 +321,16 @@ local function ApplyCoilSpeedTool()
     if CoilSpeedCleanup then pcall(CoilSpeedCleanup) end
     getgenv().CoilSpeedEnabled = true
 
+    local baseSpeed = 16
+    local h0 = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if h0 then baseSpeed = h0.WalkSpeed end
+
     local minSpeed, step = 1, 0.5
-    local speed = 16
-    local maxSpeed = 16
+    local speed = baseSpeed
+    local maxSpeed = baseSpeed
     local savedSpeed = nil
     local eHeld, qHeld = false, false
+    local eLoop, qLoop = nil, nil
     local currentTool = nil
     local waitingForCoil = false
     local conns = {}
@@ -338,6 +343,38 @@ local function ApplyCoilSpeedTool()
     local function setSpeed(v)
         speed = math.clamp(v, minSpeed, maxSpeed)
         applySpeed()
+    end
+
+    local function startLoop(key)
+        if key == "E" then
+            if eLoop then return end
+            eLoop = task.spawn(function()
+                while eHeld and hasCoil() do
+                    setSpeed(speed + step)
+                    task.wait(0.1)
+                end
+                eLoop = nil
+            end)
+        else
+            if qLoop then return end
+            qLoop = task.spawn(function()
+                while qHeld and hasCoil() do
+                    setSpeed(speed - step)
+                    task.wait(0.1)
+                end
+                qLoop = nil
+            end)
+        end
+    end
+
+    local function stopLoop(key)
+        if key == "E" then
+            eHeld = false
+            eLoop = nil
+        else
+            qHeld = false
+            qLoop = nil
+        end
     end
 
     local function findCoil(char)
@@ -375,13 +412,13 @@ local function ApplyCoilSpeedTool()
 
     local function onUnequipCoil()
         waitingForCoil = false
-        speed = 16
-        maxSpeed = 16
+        speed = baseSpeed
+        maxSpeed = baseSpeed
         savedSpeed = nil
         eHeld = false
         qHeld = false
         local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.WalkSpeed = 16 end
+        if humanoid then humanoid.WalkSpeed = baseSpeed end
     end
 
     local function onChildAdded(child)
@@ -414,8 +451,8 @@ local function ApplyCoilSpeedTool()
 
     table.insert(conns, LP.CharacterAdded:Connect(function(char)
         currentTool = nil
-        speed = 16
-        maxSpeed = 16
+        speed = baseSpeed
+        maxSpeed = baseSpeed
         savedSpeed = nil
         eHeld = false
         qHeld = false
@@ -429,9 +466,17 @@ local function ApplyCoilSpeedTool()
         if not hasCoil() then return end
 
         if input.KeyCode == Enum.KeyCode.E then
-            eHeld = true
+            if not eHeld then
+                eHeld = true
+                setSpeed(speed + step)
+                startLoop("E")
+            end
         elseif input.KeyCode == Enum.KeyCode.Q then
-            qHeld = true
+            if not qHeld then
+                qHeld = true
+                setSpeed(speed - step)
+                startLoop("Q")
+            end
         elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
             if not savedSpeed then
                 savedSpeed = speed
@@ -442,9 +487,9 @@ local function ApplyCoilSpeedTool()
 
     local function onInputEnded(input)
         if input.KeyCode == Enum.KeyCode.E then
-            eHeld = false
+            stopLoop("E")
         elseif input.KeyCode == Enum.KeyCode.Q then
-            qHeld = false
+            stopLoop("Q")
         elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
             if savedSpeed then
                 speed = savedSpeed
@@ -457,23 +502,11 @@ local function ApplyCoilSpeedTool()
     table.insert(conns, UIS.InputBegan:Connect(onInput))
     table.insert(conns, UIS.InputEnded:Connect(onInputEnded))
 
-    local acc = 0
-    table.insert(conns, RunService.Heartbeat:Connect(function(dt)
-        if not getgenv().CoilSpeedEnabled then return end
-        if not hasCoil() then return end
-        if not (eHeld or qHeld) then return end
-        acc = acc + dt
-        if acc < 0.1 then return end
-        acc = 0
-        if eHeld then setSpeed(speed + step) end
-        if qHeld then setSpeed(speed - step) end
-    end))
-
     CoilSpeedCleanup = function()
         for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
         conns = {}
         local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.WalkSpeed = 16 end
+        if humanoid then humanoid.WalkSpeed = baseSpeed end
     end
 end
 
